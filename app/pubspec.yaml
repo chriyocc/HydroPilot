@@ -1,0 +1,48 @@
+name: home_fi
+description: A new Flutter application.
+
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_circle_color_picker: ^0.3.0
+  flutter_dotenv: ^6.0.0
+  flutter_svg: ^2.2.4
+  font_awesome_flutter: ^11.0.0
+  get: ^4.7.3
+  get_storage: ^2.1.1
+  google_fonts: ^8.0.2
+  http: ^1.6.0
+  lottie: ^3.3.2
+  mqtt_client: ^10.11.9
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+dependency_overrides:
+  file: ^7.0.1
+  platform: ^3.1.6
+  process: ^5.0.5
+  path_provider: ^2.1.5
+  path_provider_linux: ^2.2.1
+  path_provider_macos: ^2.0.7
+  path_provider_platform_interface: ^2.1.2
+  plugin_platform_interface: ^2.1.8
+  xdg_directories: ^1.1.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icons/
+    - assets/lottie/
+    - assets/images/
+    - .env # API Key is stored here

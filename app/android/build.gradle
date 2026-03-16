@@ -1,0 +1,34 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+subprojects { project ->
+    def applyNamespace = {
+        def androidExtension = project.extensions.findByName("android")
+        if (androidExtension != null && androidExtension.hasProperty("namespace") && androidExtension.namespace == null) {
+            androidExtension.namespace = project.group
+        }
+    }
+
+    if (project.state.executed) {
+        applyNamespace()
+    } else {
+        project.afterEvaluate {
+            applyNamespace()
+        }
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
+}
