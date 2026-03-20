@@ -1,14 +1,83 @@
 # HydroPilot API Documentation
 
-This document describes the API contract currently expected by the Flutter app in [`/Users/yoyojun/Documents/GitHub/HydroPilot/app`](/Users/yoyojun/Documents/GitHub/HydroPilot/app).
+This document describes HydroPilot's intended hybrid transport design and the local REST endpoints already expected by the Flutter app in [`/Users/yoyojun/Documents/GitHub/HydroPilot/app`](/Users/yoyojun/Documents/GitHub/HydroPilot/app).
 
-The current app is **REST-first** for the MVP.
+## Transport Overview
 
-## Base URLs
+HydroPilot uses two communication paths for different jobs:
 
-### Device Runtime API
+- **Local REST**
+  Used for AP onboarding, local service/config, and local debug while the phone is on the same LAN or connected to the ESP32 access point.
+- **Remote MQTT**
+  Used for remote commands, state synchronization, alarms, and telemetry without exposing the ESP32 directly to the public internet.
 
-Used for dashboard polling and manual controls.
+This means:
+
+- the app does **not** use `localhost` to talk to the ESP32
+- the app talks to the ESP32's **local IP** for REST
+- the app and ESP32 both connect outward to an MQTT broker for remote runtime
+
+## Network Paths
+
+### 1. Local AP Onboarding
+
+Used when the ESP32 starts in access-point mode for first setup.
+
+```text
+Phone App -> ESP32 AP WiFi -> ESP32 HTTP server
+```
+
+Typical address:
+
+```text
+http://192.168.4.1
+```
+
+### 2. Local Service / Maintenance Mode
+
+Used when the phone and ESP32 are on the same LAN.
+
+```text
+Phone App -> Local WiFi Router -> ESP32 HTTP server
+```
+
+Typical address:
+
+```text
+http://192.168.1.50
+```
+
+### 3. Remote Runtime Mode
+
+Used for remote control and live updates.
+
+```text
+Phone App -> MQTT Broker <- ESP32
+```
+
+The ESP32 is **not** exposed to the public internet with direct REST in this design.
+
+## Local REST API
+
+The REST API is the **local admin/service interface**.
+
+Recommended responsibilities:
+
+- WiFi onboarding
+- local configuration
+- calibration
+- local health/debug inspection
+- optional local status fetch for diagnostics
+
+### Base URLs
+
+#### ESP32 AP Mode
+
+```text
+http://192.168.4.1
+```
+
+#### ESP32 Local LAN Mode
 
 ```text
 http://<device-ip>
@@ -20,19 +89,37 @@ Example:
 http://192.168.1.50
 ```
 
-### ESP32 WiFi Setup API
+## Local REST Endpoints
 
-Used only when the ESP32 is running in AP mode.
+### 1. Configure WiFi
 
-```text
-http://192.168.4.1
+Sends WiFi credentials to the ESP32 while it is in AP mode.
+
+**Request**
+
+```http
+POST /wifi
+Content-Type: application/json
 ```
 
-## Endpoints
+**Full URL**
 
-### 1. Get System Status
+```http
+POST http://192.168.4.1/wifi
+```
 
-Reads hydroponic sensor values and device states.
+**Request Body**
+
+```json
+{
+  "ssid": "YourWiFiName",
+  "password": "YourPassword"
+}
+```
+
+### 2. Get Local Status
+
+Reads hydroponic sensor values and device states from the local device.
 
 **Request**
 
@@ -59,18 +146,14 @@ GET http://192.168.1.50/status
 }
 ```
 
-**Accepted field name variants**
-
-The Flutter app currently accepts these alternative names:
+**Accepted field name variants in the current Flutter app**
 
 - `waterTemperature`, `water_temperature`, `temp`, `temperature`
 - `waterLevel`, `water_level`, `level`
 - `pumpOn`, `pump_on`, `pump`
 - `lightOn`, `light_on`, `light`
 
-**Accepted boolean formats**
-
-The app currently accepts:
+**Accepted boolean formats in the current Flutter app**
 
 - `true` / `false`
 - `1` / `0`
@@ -78,9 +161,9 @@ The app currently accepts:
 - `"on"` / `"off"`
 - `"1"` / `"0"`
 
-### 2. Control Pump
+### 3. Control Pump
 
-Turns the pump on or off.
+Local maintenance command for pump state.
 
 **Request**
 
@@ -97,9 +180,9 @@ Content-Type: application/json
 }
 ```
 
-### 3. Control Grow Light
+### 4. Control Grow Light
 
-Turns the grow light on or off.
+Local maintenance command for grow light state.
 
 **Request**
 
@@ -116,9 +199,9 @@ Content-Type: application/json
 }
 ```
 
-### 4. Dose Nutrient A
+### 5. Dose Nutrient A
 
-Triggers a nutrient A dosing action.
+Local maintenance command for nutrient A dosing.
 
 **Request**
 
@@ -135,9 +218,9 @@ Content-Type: application/json
 }
 ```
 
-### 5. Dose Nutrient B
+### 6. Dose Nutrient B
 
-Triggers a nutrient B dosing action.
+Local maintenance command for nutrient B dosing.
 
 **Request**
 
@@ -154,53 +237,161 @@ Content-Type: application/json
 }
 ```
 
-### 6. Configure WiFi
+### 7. Recommended Local Service Endpoints
 
-Sends WiFi credentials to the ESP32 while it is in AP mode.
+These are not fully implemented in the Flutter app yet, but they fit the agreed architecture and should be added on the ESP32 side for service workflows:
 
-**Request**
+- `GET /config`
+- `PUT /config`
+- `GET /health`
+- `GET /debug/status`
 
-```http
-POST /wifi
-Content-Type: application/json
+Recommended use:
+
+- `GET /config`: read saved network/device settings
+- `PUT /config`: update non-runtime config
+- `GET /health`: basic health and uptime
+- `GET /debug/status`: sensor/debug view for troubleshooting
+
+## Remote MQTT Contract
+
+MQTT is the **operational runtime interface**.
+
+Recommended responsibilities:
+
+- remote commands
+- device state sync
+- alarms
+- live telemetry
+- availability / online-offline state
+
+### Topic Structure
+
+Use a per-device namespace:
+
+```text
+hydro/device/<deviceId>/...
 ```
 
-**Full URL**
+Recommended topics:
 
-```http
-POST http://192.168.4.1/wifi
-```
+- `hydro/device/<deviceId>/cmd/pump`
+- `hydro/device/<deviceId>/cmd/light`
+- `hydro/device/<deviceId>/cmd/nutrient/a`
+- `hydro/device/<deviceId>/cmd/nutrient/b`
+- `hydro/device/<deviceId>/state/pump`
+- `hydro/device/<deviceId>/state/light`
+- `hydro/device/<deviceId>/telemetry/ph`
+- `hydro/device/<deviceId>/telemetry/ec`
+- `hydro/device/<deviceId>/telemetry/temp`
+- `hydro/device/<deviceId>/telemetry/waterlevel`
+- `hydro/device/<deviceId>/alarm`
+- `hydro/device/<deviceId>/availability`
 
-**Request Body**
+### Command Payload
+
+Recommended command payload shape:
 
 ```json
 {
-  "ssid": "YourWiFiName",
-  "password": "YourPassword"
+  "requestId": "abc-123",
+  "target": true,
+  "ts": 1710000000,
+  "source": "mobile-app"
 }
 ```
 
-## Status Codes
+For nutrient dosing:
+
+```json
+{
+  "requestId": "dose-123",
+  "action": "dose",
+  "ts": 1710000000,
+  "source": "mobile-app"
+}
+```
+
+### State / Ack Payload
+
+Recommended device confirmation payload:
+
+```json
+{
+  "requestId": "abc-123",
+  "actual": true,
+  "ok": true,
+  "ts": 1710000001,
+  "source": "device"
+}
+```
+
+### Alarm Payload
+
+Recommended alarm payload:
+
+```json
+{
+  "type": "low_water",
+  "severity": "critical",
+  "message": "Water level below threshold",
+  "ts": 1710000002
+}
+```
+
+### Availability Payload
+
+Recommended availability values:
+
+- `online`
+- `offline`
+
+### Publish Timing
+
+Recommended policy:
+
+- publish immediately on change for:
+  - pump state
+  - grow light state
+  - alarms
+- publish on interval for analog telemetry:
+  - water level: `1-2s` if critical, otherwise `2-5s`
+  - pH: `10-30s`
+  - EC: `10-30s`
+  - water temperature: `10-30s`
+
+## Command Confirmation Rule
+
+HydroPilot should follow this rule:
+
+1. app sends command
+2. device executes command
+3. device publishes actual resulting state
+4. app treats device-confirmed state as truth
+
+The app should not treat a command as fully successful just because it sent it.
+
+## Status Codes for Local REST
 
 The current Flutter app treats any `2xx` response as success.
 
 Recommended behavior for the ESP32:
 
 - `200 OK` for successful reads
-- `200 OK` or `204 No Content` for successful control commands
+- `200 OK` or `204 No Content` for successful control/config commands
 - `400 Bad Request` for invalid JSON or missing fields
 - `500 Internal Server Error` for unexpected device errors
 
 ## App Settings Stored Locally
 
-The app stores these values locally:
+The Flutter app currently stores:
 
 - `deviceIp`
 - `mqttBrokerIp`
 - `topicPrefix`
 - `refreshInterval`
 
-Default values currently used by the app:
+Default values in the current Flutter app:
 
 ```json
 {
@@ -211,41 +402,26 @@ Default values currently used by the app:
 }
 ```
 
-## MQTT Notes
+For the target hybrid design, additional settings should eventually include:
 
-MQTT is not the active runtime transport yet.
+- `deviceId`
+- broker port
+- broker username/token
+- local-vs-remote mode behavior
 
-The app currently stores MQTT-related settings for future use:
+## Current Flutter Implementation Status
 
-- `mqttBrokerIp`
-- `topicPrefix`
-
-Suggested future topic names:
-
-- `hydro/ph`
-- `hydro/ec`
-- `hydro/temp`
-- `hydro/waterlevel`
-- `hydro/pump`
-- `hydro/light`
-- `hydro/nutrient/a`
-- `hydro/nutrient/b`
-
-## Current Implementation References
-
-The Flutter code that uses this contract is here:
+Current app code already implements local REST calls in:
 
 - [`/Users/yoyojun/Documents/GitHub/HydroPilot/app/lib/app/services/hydro_api_service.dart`](/Users/yoyojun/Documents/GitHub/HydroPilot/app/lib/app/services/hydro_api_service.dart)
 - [`/Users/yoyojun/Documents/GitHub/HydroPilot/app/lib/app/models/app_settings.dart`](/Users/yoyojun/Documents/GitHub/HydroPilot/app/lib/app/models/app_settings.dart)
 - [`/Users/yoyojun/Documents/GitHub/HydroPilot/app/lib/app/modules/home/controllers/home_controller.dart`](/Users/yoyojun/Documents/GitHub/HydroPilot/app/lib/app/modules/home/controllers/home_controller.dart)
 
-## Important Note
+MQTT runtime support is currently a planned architecture direction, not a completed app implementation.
 
-This document reflects the API shape the app currently expects.
+## Important Notes
 
-If your ESP32 firmware uses a different route structure or different JSON fields, either:
-
-1. update the firmware to match this document, or
-2. update the Flutter API service to match the firmware
-
-For beginner-friendly progress, matching the firmware to this document is the simpler next step.
+- Local REST means the phone talks directly to the ESP32 local IP.
+- `localhost` is not used to talk to the ESP32.
+- Remote runtime should use MQTT, not direct public REST to the ESP32.
+- If the firmware and app differ, either the firmware must match this document or the app transport layer must be updated to match the firmware.
