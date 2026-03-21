@@ -123,7 +123,7 @@ class HydroApiService {
       if (line.isEmpty) {
         if (currentEventName != null && currentData.isNotEmpty) {
           yield HydroSseEvent(
-            name: currentEventName!,
+            name: currentEventName,
             payload: jsonDecode(currentData.toString()) as Map<String, dynamic>,
           );
         }

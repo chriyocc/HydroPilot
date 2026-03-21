@@ -26,7 +26,6 @@ void main() {
     final settingsService = await createSettingsService(
       const AppSettings(
         backendBaseUrl: '',
-        maintenanceDeviceIp: '',
         refreshInterval: 0,
       ),
     );
@@ -49,7 +48,6 @@ void main() {
     final settingsService = await createSettingsService(
       const AppSettings(
         backendBaseUrl: 'http://localhost:3000',
-        maintenanceDeviceIp: '192.168.1.50',
         refreshInterval: 0,
       ),
     );
@@ -86,7 +84,6 @@ void main() {
     final settingsService = await createSettingsService(
       const AppSettings(
         backendBaseUrl: 'http://localhost:3000',
-        maintenanceDeviceIp: '192.168.1.50',
         refreshInterval: 0,
       ),
     );
@@ -152,17 +149,11 @@ void main() {
     expect(controller.deviceState.pumpOn, true);
   });
 
-  test('controller enters and exits AP maintenance mode explicitly', () async {
-    final apiService = FakeHydroApiService()
-      ..localHealth = const LocalMaintenanceHealth(
-        isReachable: true,
-        mode: 'maintenance',
-        baseUrl: 'http://192.168.4.1',
-      );
+  test('controller posts wifi credentials to device setup endpoint', () async {
+    final apiService = FakeHydroApiService();
     final settingsService = await createSettingsService(
       const AppSettings(
         backendBaseUrl: 'http://localhost:3000',
-        maintenanceDeviceIp: '192.168.1.50',
         refreshInterval: 0,
       ),
     );
@@ -175,40 +166,14 @@ void main() {
     controller.onInit();
     await Future<void>.delayed(Duration.zero);
 
-    await controller.enterMaintenanceMode(MaintenanceConnectionType.ap);
+    await controller.configureWifi(ssid: 'OfficeWiFi', password: 'secret123');
 
-    expect(controller.isInMaintenanceMode, true);
-    expect(controller.maintenanceConnectionType, MaintenanceConnectionType.ap);
-    expect(controller.maintenanceHealth?.baseUrl, 'http://192.168.4.1');
-
-    controller.exitMaintenanceMode();
-
-    expect(controller.isInMaintenanceMode, false);
-    expect(controller.maintenanceConnectionType, isNull);
-  });
-
-  test('controller rejects unreachable LAN maintenance entry', () async {
-    final apiService = FakeHydroApiService()
-      ..localHealthError = Exception('unreachable');
-    final settingsService = await createSettingsService(
-      const AppSettings(
-        backendBaseUrl: 'http://localhost:3000',
-        maintenanceDeviceIp: '192.168.1.50',
-        refreshInterval: 0,
-      ),
+    expect(apiService.lastConfiguredSsid, 'OfficeWiFi');
+    expect(apiService.lastConfiguredPassword, 'secret123');
+    expect(
+      controller.lastActionMessage,
+      'WiFi credentials sent to the controller.',
     );
-    final controller = HomeController(
-      settingsService: settingsService,
-      apiService: apiService,
-      enableAutoRefresh: false,
-    );
-
-    controller.onInit();
-    await Future<void>.delayed(Duration.zero);
-    await controller.enterMaintenanceMode(MaintenanceConnectionType.lan);
-
-    expect(controller.isInMaintenanceMode, false);
-    expect(controller.lastMaintenanceMessage, 'Unable to reach local device.');
   });
 }
 
@@ -223,8 +188,8 @@ class FakeHydroApiService extends HydroApiService {
       : _streamController = StreamController<HydroSseEvent>.broadcast();
 
   final StreamController<HydroSseEvent> _streamController;
-  LocalMaintenanceHealth? localHealth;
-  Object? localHealthError;
+  String? lastConfiguredSsid;
+  String? lastConfiguredPassword;
 
   @override
   Future<HydroStatusSnapshot> fetchStatus(String backendBaseUrl) async {
@@ -249,16 +214,12 @@ class FakeHydroApiService extends HydroApiService {
   }
 
   @override
-  Future<LocalMaintenanceHealth> fetchLocalHealth(String baseUrl) async {
-    if (localHealthError != null) {
-      throw localHealthError!;
-    }
-    return localHealth ??
-        LocalMaintenanceHealth(
-          isReachable: true,
-          mode: 'maintenance',
-          baseUrl: baseUrl,
-        );
+  Future<void> configureWifi({
+    required String ssid,
+    required String password,
+  }) async {
+    lastConfiguredSsid = ssid;
+    lastConfiguredPassword = password;
   }
 
   void emit(HydroSseEvent event) {

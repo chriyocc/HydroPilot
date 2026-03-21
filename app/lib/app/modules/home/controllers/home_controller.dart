@@ -20,11 +20,6 @@ enum CommandType {
   nutrientB,
 }
 
-enum MaintenanceConnectionType {
-  ap,
-  lan,
-}
-
 class HomeController extends GetxController {
   HomeController({
     SettingsService? settingsService,
@@ -51,15 +46,9 @@ class HomeController extends GetxController {
   SensorData sensorData = const SensorData();
   DeviceState deviceState = const DeviceState();
   RuntimeStatus runtimeStatus = const RuntimeStatus();
-  bool isInMaintenanceMode = false;
-  MaintenanceConnectionType? maintenanceConnectionType;
-  LocalMaintenanceHealth? maintenanceHealth;
-  Map<String, dynamic>? maintenanceConfig;
-  Map<String, dynamic>? maintenanceDebugStatus;
   bool isLoadingStatus = true;
   String? statusMessage;
   String? lastActionMessage;
-  String? lastMaintenanceMessage;
 
   final List<Widget> homeViews = const [
     DashboardView(),
@@ -84,8 +73,6 @@ class HomeController extends GetxController {
   bool isCommandPending(CommandType type) {
     return _pendingCommandRequestIds.containsKey(type);
   }
-
-  String get maintenanceDeviceIp => settings.maintenanceDeviceIp;
 
   Future<void> refreshStatus({bool showLoading = false}) async {
     if (!hasBackendConfigured) {
@@ -121,14 +108,6 @@ class HomeController extends GetxController {
 
     await _clearConnectionState();
     await _loadRuntime();
-  }
-
-  Future<void> updateMaintenanceDeviceIp(String maintenanceDeviceIp) async {
-    settings = settings.copyWith(
-      maintenanceDeviceIp: maintenanceDeviceIp.trim(),
-    );
-    await _settingsService.saveSettings(settings);
-    update(['settings', 'maintenance']);
   }
 
   Future<void> togglePump(bool value) async {
@@ -173,79 +152,12 @@ class HomeController extends GetxController {
     try {
       await _apiService.configureWifi(ssid: ssid, password: password);
       lastActionMessage = 'WiFi credentials sent to the controller.';
-      if (maintenanceConnectionType == MaintenanceConnectionType.ap) {
-        lastMaintenanceMessage =
-            'WiFi credentials sent. The device may leave AP mode shortly.';
-        exitMaintenanceMode();
-      }
     } catch (_) {
       lastActionMessage = 'Request failed. Check the controller connection.';
       rethrow;
     } finally {
       update(['control']);
     }
-  }
-
-  Future<void> enterMaintenanceMode(MaintenanceConnectionType type) async {
-    final baseUrl = switch (type) {
-      MaintenanceConnectionType.ap => 'http://192.168.4.1',
-      MaintenanceConnectionType.lan => _buildLanMaintenanceBaseUrl(),
-    };
-
-    if (baseUrl == null) {
-      lastMaintenanceMessage = 'Set a local device IP before using LAN mode.';
-      update(['maintenance', 'settings']);
-      return;
-    }
-
-    try {
-      final health = await _apiService.fetchLocalHealth(baseUrl);
-      isInMaintenanceMode = true;
-      maintenanceConnectionType = type;
-      maintenanceHealth = health;
-      lastMaintenanceMessage =
-          'Connected directly to the device in maintenance mode.';
-      await _loadMaintenanceDetails(baseUrl);
-    } catch (_) {
-      isInMaintenanceMode = false;
-      maintenanceConnectionType = null;
-      maintenanceHealth = null;
-      maintenanceConfig = null;
-      maintenanceDebugStatus = null;
-      lastMaintenanceMessage = 'Unable to reach local device.';
-    } finally {
-      update(['maintenance', 'settings']);
-    }
-  }
-
-  Future<void> refreshMaintenanceStatus() async {
-    final baseUrl = maintenanceHealth?.baseUrl ??
-        (maintenanceConnectionType == MaintenanceConnectionType.ap
-            ? 'http://192.168.4.1'
-            : _buildLanMaintenanceBaseUrl());
-    if (!isInMaintenanceMode || baseUrl == null) {
-      return;
-    }
-
-    try {
-      maintenanceHealth = await _apiService.fetchLocalHealth(baseUrl);
-      await _loadMaintenanceDetails(baseUrl);
-      lastMaintenanceMessage = 'Maintenance details refreshed.';
-    } catch (_) {
-      lastMaintenanceMessage = 'Unable to refresh maintenance status.';
-    } finally {
-      update(['maintenance']);
-    }
-  }
-
-  void exitMaintenanceMode() {
-    isInMaintenanceMode = false;
-    maintenanceConnectionType = null;
-    maintenanceHealth = null;
-    maintenanceConfig = null;
-    maintenanceDebugStatus = null;
-    lastMaintenanceMessage = 'Returned to backend runtime mode.';
-    update(['maintenance']);
   }
 
   Future<void> _loadSettings() async {
@@ -280,20 +192,6 @@ class HomeController extends GetxController {
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     _pendingCommandRequestIds.clear();
-  }
-
-  Future<void> _loadMaintenanceDetails(String baseUrl) async {
-    try {
-      maintenanceConfig = await _apiService.fetchLocalConfig(baseUrl);
-    } catch (_) {
-      maintenanceConfig = null;
-    }
-
-    try {
-      maintenanceDebugStatus = await _apiService.fetchLocalDebugStatus(baseUrl);
-    } catch (_) {
-      maintenanceDebugStatus = null;
-    }
   }
 
   void _connectEventStream() {
@@ -500,14 +398,6 @@ class HomeController extends GetxController {
       CommandType.nutrientA => 'Nutrient A',
       CommandType.nutrientB => 'Nutrient B',
     };
-  }
-
-  String? _buildLanMaintenanceBaseUrl() {
-    final ip = settings.maintenanceDeviceIp.trim();
-    if (ip.isEmpty) {
-      return null;
-    }
-    return 'http://$ip';
   }
 
   void _recomputeStatusMessage() {

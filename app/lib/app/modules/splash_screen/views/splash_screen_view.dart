@@ -56,16 +56,26 @@ class _SplashScreenViewState extends State<SplashScreenView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 72,
-                height: 72,
+                width: 84,
+                height: 84,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context).colorScheme.primary.withValues(
+                        alpha: 0.12,
+                      ),
+                      blurRadius: 22,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
                 ),
-                child: Icon(
-                  Icons.water_drop_rounded,
-                  size: 36,
-                  color: Theme.of(context).colorScheme.primary,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: Image.asset(
+                    'assets/images/hydropilot_mark.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
