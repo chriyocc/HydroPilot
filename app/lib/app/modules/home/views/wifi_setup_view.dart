@@ -29,69 +29,84 @@ class _WifiSetupViewState extends State<WifiSetupView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Device Setup')),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Text(
-            'Connect the controller to Wi-Fi',
-            style: HomeFiTextTheme.kHeadTextStyle.copyWith(
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Join the controller access point first. This recovery flow sends your network credentials to `192.168.4.1`.',
-            style: HomeFiTextTheme.kBodyTextStyle.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: const [kCardShadow],
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _ssidController,
-                    decoration: const InputDecoration(labelText: 'SSID'),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'SSID is required';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Password'),
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(52),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
+      body: GetBuilder<HomeController>(
+        id: 'control',
+        builder: (controller) {
+          final isAutomaticFlow = controller.isAutoProvisioningSupported;
+
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text(
+                'Connect the controller to Wi-Fi',
+                style: HomeFiTextTheme.kHeadTextStyle.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isAutomaticFlow
+                    ? 'The app will ask Android to connect to the controller setup Wi-Fi before sending your home network credentials to 192.168.4.1.'
+                    : 'Join the controller access point first. This recovery flow sends your network credentials to 192.168.4.1.',
+                style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [kCardShadow],
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        controller: _ssidController,
+                        decoration: const InputDecoration(labelText: 'SSID'),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'SSID is required';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'Password'),
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isSubmitting ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: Text(
+                            _isSubmitting
+                                ? 'Connecting...'
+                                : isAutomaticFlow
+                                ? 'Connect Automatically'
+                                : 'Connect Manually',
+                          ),
                         ),
                       ),
-                      child: Text(_isSubmitting ? 'Connecting...' : 'Connect'),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -106,14 +121,23 @@ class _WifiSetupViewState extends State<WifiSetupView> {
     });
 
     try {
-      await controller.configureWifi(
-        ssid: _ssidController.text.trim(),
-        password: _passwordController.text,
-      );
+      if (controller.isAutoProvisioningSupported) {
+        await controller.startWifiProvisioning(
+          homeSsid: _ssidController.text.trim(),
+          homePassword: _passwordController.text,
+        );
+      } else {
+        await controller.configureWifi(
+          ssid: _ssidController.text.trim(),
+          password: _passwordController.text,
+        );
+      }
       if (mounted) {
         Get.snackbar(
           'Setup request sent',
-          'Credentials posted to 192.168.4.1.',
+          controller.isAutoProvisioningSupported
+              ? 'Android connected to the controller and sent the credentials.'
+              : 'Credentials posted to 192.168.4.1.',
         );
         Navigator.of(context).pop();
       }

@@ -10,6 +10,7 @@ import 'package:home_fi/app/models/sensor_data.dart';
 import 'package:home_fi/app/modules/connected_device/views/connected_device_view.dart';
 import 'package:home_fi/app/modules/home/views/dashboard_view.dart';
 import 'package:home_fi/app/modules/home/views/settings_view.dart';
+import 'package:home_fi/app/services/device_provisioning_service.dart';
 import 'package:home_fi/app/services/hydro_api_service.dart';
 import 'package:home_fi/app/services/settings_service.dart';
 
@@ -21,15 +22,22 @@ enum CommandType {
 }
 
 class HomeController extends GetxController {
+  static const String setupAccessPointSsid = 'ESP32_WIFI_AP';
+  static const String setupAccessPointPassword = '12345678';
+
   HomeController({
     SettingsService? settingsService,
     HydroApiService? apiService,
+    DeviceProvisioningService? provisioningService,
     this.enableAutoRefresh = true,
   })  : _settingsService = settingsService ?? SettingsService(),
-        _apiService = apiService ?? HydroApiService();
+        _apiService = apiService ?? HydroApiService(),
+        _provisioningService =
+            provisioningService ?? DeviceProvisioningService();
 
   final SettingsService _settingsService;
   final HydroApiService _apiService;
+  final DeviceProvisioningService _provisioningService;
   final bool enableAutoRefresh;
 
   final RxInt _currentIndex = 0.obs;
@@ -47,6 +55,7 @@ class HomeController extends GetxController {
   DeviceState deviceState = const DeviceState();
   RuntimeStatus runtimeStatus = const RuntimeStatus();
   bool isLoadingStatus = true;
+  bool isAutoProvisioningSupported = false;
   String? statusMessage;
   String? lastActionMessage;
 
@@ -60,6 +69,7 @@ class HomeController extends GetxController {
   void onInit() {
     super.onInit();
     _loadSettings();
+    _loadProvisioningSupport();
   }
 
   void setCurrentIndex(int index) {
@@ -160,10 +170,58 @@ class HomeController extends GetxController {
     }
   }
 
+  Future<void> startWifiProvisioning({
+    required String homeSsid,
+    required String homePassword,
+  }) async {
+    final provisioningResult = await _provisioningService.connectToDeviceAp(
+      ssid: setupAccessPointSsid,
+      password: setupAccessPointPassword,
+    );
+
+    if (!provisioningResult.isConnected) {
+      lastActionMessage = switch (provisioningResult.code) {
+        ProvisioningResultCode.unsupportedAndroidVersion =>
+          'Automatic setup is unavailable on this Android version. Join the controller Wi-Fi manually.',
+        ProvisioningResultCode.userDenied =>
+          'Android did not connect to the controller Wi-Fi.',
+        ProvisioningResultCode.connectionTimeout =>
+          'Timed out waiting for the controller Wi-Fi.',
+        ProvisioningResultCode.connectionFailed =>
+          provisioningResult.message ??
+              'Unable to connect to the controller Wi-Fi.',
+        ProvisioningResultCode.connected => lastActionMessage,
+      };
+      update(['control']);
+      throw Exception(lastActionMessage);
+    }
+
+    try {
+      await _apiService.configureWifi(
+        ssid: homeSsid,
+        password: homePassword,
+      );
+      lastActionMessage =
+          'WiFi credentials sent to the controller. Device is joining your network.';
+    } catch (_) {
+      lastActionMessage = 'Request failed. Check the controller connection.';
+      rethrow;
+    } finally {
+      await _provisioningService.disconnectFromDeviceAp();
+      update(['control']);
+    }
+  }
+
   Future<void> _loadSettings() async {
     settings = _settingsService.loadSettings();
     update(['settings']);
     await _loadRuntime();
+  }
+
+  Future<void> _loadProvisioningSupport() async {
+    isAutoProvisioningSupported =
+        await _provisioningService.isAutoProvisioningSupported();
+    update(['control']);
   }
 
   Future<void> _loadRuntime() async {

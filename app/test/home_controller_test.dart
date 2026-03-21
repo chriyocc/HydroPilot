@@ -7,6 +7,7 @@ import 'package:home_fi/app/models/device_state.dart';
 import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/models/sensor_data.dart';
 import 'package:home_fi/app/modules/home/controllers/home_controller.dart';
+import 'package:home_fi/app/services/device_provisioning_service.dart';
 import 'package:home_fi/app/services/hydro_api_service.dart';
 import 'package:home_fi/app/services/settings_service.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -175,6 +176,83 @@ void main() {
       'WiFi credentials sent to the controller.',
     );
   });
+
+  test('controller connects to device AP before posting wifi credentials',
+      () async {
+    final apiService = FakeHydroApiService();
+    final provisioningService = FakeDeviceProvisioningService();
+    final settingsService = await createSettingsService(
+      const AppSettings(
+        backendBaseUrl: 'http://localhost:3000',
+        refreshInterval: 0,
+      ),
+    );
+    final controller = HomeController(
+      settingsService: settingsService,
+      apiService: apiService,
+      provisioningService: provisioningService,
+      enableAutoRefresh: false,
+    );
+
+    controller.onInit();
+    await Future<void>.delayed(Duration.zero);
+
+    await controller.startWifiProvisioning(
+      homeSsid: 'OfficeWiFi',
+      homePassword: 'secret123',
+    );
+
+    expect(provisioningService.lastSsid, 'ESP32_WIFI_AP');
+    expect(provisioningService.lastPassword, '12345678');
+    expect(apiService.lastConfiguredSsid, 'OfficeWiFi');
+    expect(apiService.lastConfiguredPassword, 'secret123');
+    expect(provisioningService.disconnectCallCount, 1);
+    expect(
+      controller.lastActionMessage,
+      'WiFi credentials sent to the controller. Device is joining your network.',
+    );
+  });
+
+  test('controller falls back to manual provisioning when unsupported',
+      () async {
+    final apiService = FakeHydroApiService();
+    final provisioningService = FakeDeviceProvisioningService(
+      connectionResult: const ProvisioningResult(
+        code: ProvisioningResultCode.unsupportedAndroidVersion,
+      ),
+      isSupported: false,
+    );
+    final settingsService = await createSettingsService(
+      const AppSettings(
+        backendBaseUrl: 'http://localhost:3000',
+        refreshInterval: 0,
+      ),
+    );
+    final controller = HomeController(
+      settingsService: settingsService,
+      apiService: apiService,
+      provisioningService: provisioningService,
+      enableAutoRefresh: false,
+    );
+
+    controller.onInit();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.isAutoProvisioningSupported, false);
+
+    await expectLater(
+      controller.startWifiProvisioning(
+        homeSsid: 'OfficeWiFi',
+        homePassword: 'secret123',
+      ),
+      throwsException,
+    );
+    expect(apiService.lastConfiguredSsid, isNull);
+    expect(
+      controller.lastActionMessage,
+      'Automatic setup is unavailable on this Android version. Join the controller Wi-Fi manually.',
+    );
+  });
 }
 
 Future<SettingsService> createSettingsService(AppSettings settings) async {
@@ -224,5 +302,45 @@ class FakeHydroApiService extends HydroApiService {
 
   void emit(HydroSseEvent event) {
     _streamController.add(event);
+  }
+}
+
+class FakeDeviceProvisioningService extends DeviceProvisioningService {
+  FakeDeviceProvisioningService({
+    this.isSupported = true,
+    this.connectionResult = const ProvisioningResult(
+      code: ProvisioningResultCode.connected,
+    ),
+  }) : super(platformInvoker: _unusedPlatformInvoker);
+
+  static Future<Map<Object?, Object?>> _unusedPlatformInvoker({
+    required String method,
+    required Map<String, Object?> arguments,
+  }) {
+    throw UnimplementedError();
+  }
+
+  final bool isSupported;
+  final ProvisioningResult connectionResult;
+  String? lastSsid;
+  String? lastPassword;
+  int disconnectCallCount = 0;
+
+  @override
+  Future<bool> isAutoProvisioningSupported() async => isSupported;
+
+  @override
+  Future<ProvisioningResult> connectToDeviceAp({
+    required String ssid,
+    required String password,
+  }) async {
+    lastSsid = ssid;
+    lastPassword = password;
+    return connectionResult;
+  }
+
+  @override
+  Future<void> disconnectFromDeviceAp() async {
+    disconnectCallCount += 1;
   }
 }
