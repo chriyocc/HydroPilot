@@ -3,6 +3,9 @@
 # General editor and OS files
 /.idea/
 /.vscode/
+*.swp
+*.swo
+*~
 
 # Node.js backend
 backend/node_modules/
@@ -21,5 +24,15 @@ app/android/.gradle/
 app/android/.kotlin/
 app/android/local.properties
 
-# Firmware local build artifacts
+# Firmware local build artifacts and local tooling
+firmware/esp32/build/
+firmware/esp32/sdkconfig
+firmware/esp32/sdkconfig.old
+firmware/esp32/managed_components/
+firmware/esp32/.cache/
+firmware/esp32/.clangd
+firmware/esp32/.devcontainer/
 firmware/esp32/.pio/
+firmware/esp32/.vscode/c_cpp_properties.json
+firmware/esp32/.vscode/launch.json
+firmware/esp32/.vscode/settings.json

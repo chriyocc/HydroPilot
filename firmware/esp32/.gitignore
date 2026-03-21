@@ -1,0 +1,35 @@
+# ESP-IDF build output
+/build/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# Generated binaries and maps
+*.bin
+*.elf
+*.map
+flasher_args.json
+
+# Python and local cache
+__pycache__/
+*.pyc
+.cache/
+
+# Local editor and tool files
+.clangd
+.ccls-cache/
+compile_commands.json
+.devcontainer/
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/settings.json
+
+# General temp files
+.DS_Store
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
