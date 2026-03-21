@@ -13,8 +13,9 @@ Related projects in this repo:
 
 - Dashboard with pH, EC, water temperature, water level, pump status, and grow light status
 - Manual controls for pump, grow light, nutrient A, and nutrient B
+- Live runtime updates from the backend via Server-Sent Events (SSE)
 - WiFi setup flow for ESP32 AP mode via `POST http://192.168.4.1/wifi`
-- Local settings for device IP, optional MQTT broker IP, topic prefix, and refresh interval
+- Local settings for backend base URL
 
 ## Transport Model
 
@@ -27,36 +28,27 @@ HydroPilot uses a hybrid transport design:
 
 ### Current Flutter Implementation
 
-The current Flutter app already implements local REST calls for:
+The Flutter app now uses the backend as the runtime transport:
 
-- `GET /status`
-- `POST /control/pump`
-- `POST /control/light`
-- `POST /control/nutrient/a`
-- `POST /control/nutrient/b`
+- `GET /api/device/status`
+- `POST /api/device/commands/pump`
+- `POST /api/device/commands/light`
+- `POST /api/device/commands/nutrient/a`
+- `POST /api/device/commands/nutrient/b`
+- `GET /api/device/events`
+
+The only direct ESP32 call that remains in the mobile app is:
+
 - `POST /wifi` at `192.168.4.1`
 
-The current Flutter app also stores MQTT-related settings, but MQTT runtime transport is still planned rather than fully implemented.
+### Backend Runtime Notes
 
-### Local REST Notes
+The app expects a backend base URL such as:
 
-Local REST means the app talks directly to the ESP32 local IP such as:
+- `http://192.168.1.44:3000` on a LAN
+- `https://your-backend.example.com` when deployed
 
-- `http://192.168.4.1` in AP mode
-- `http://192.168.1.50` on a LAN
-
-It does **not** mean `localhost`.
-
-### Local Status Payload
-
-The current Flutter app accepts these `GET /status` fields:
-
-- `ph`
-- `ec`
-- `waterTemperature` or `water_temperature`
-- `waterLevel` or `water_level`
-- `pumpOn` or `pump_on`
-- `lightOn` or `light_on`
+The app does **not** use `localhost` to reach the backend unless the device/emulator is configured to map it explicitly.
 
 ## Documentation
 

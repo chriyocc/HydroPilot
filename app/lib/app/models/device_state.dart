@@ -1,3 +1,5 @@
+const _noDeviceStateChange = Object();
+
 class DeviceState {
   const DeviceState({
     this.pumpOn,
@@ -8,12 +10,16 @@ class DeviceState {
   final bool? lightOn;
 
   DeviceState copyWith({
-    bool? pumpOn,
-    bool? lightOn,
+    Object? pumpOn = _noDeviceStateChange,
+    Object? lightOn = _noDeviceStateChange,
   }) {
     return DeviceState(
-      pumpOn: pumpOn ?? this.pumpOn,
-      lightOn: lightOn ?? this.lightOn,
+      pumpOn: identical(pumpOn, _noDeviceStateChange)
+          ? this.pumpOn
+          : pumpOn as bool?,
+      lightOn: identical(lightOn, _noDeviceStateChange)
+          ? this.lightOn
+          : lightOn as bool?,
     );
   }
 }

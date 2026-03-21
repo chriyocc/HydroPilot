@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:home_fi/app/models/device_state.dart';
+import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/models/sensor_data.dart';
 import 'package:home_fi/app/modules/home/controllers/home_controller.dart';
 import 'package:home_fi/app/modules/home/views/home_view.dart';
@@ -50,6 +51,7 @@ void main() {
     expect(find.text('Dashboard'), findsOneWidget);
     expect(find.text('Control'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Setup / Maintenance'), findsOneWidget);
   });
 
   testWidgets('app leaves splash and opens dashboard',
@@ -64,7 +66,7 @@ void main() {
 
 class FakeHydroApiService extends HydroApiService {
   @override
-  Future<HydroStatusSnapshot> fetchStatus(String deviceIp) async {
+  Future<HydroStatusSnapshot> fetchStatus(String backendBaseUrl) async {
     return const HydroStatusSnapshot(
       sensorData: SensorData(
         ph: 6.2,
@@ -75,6 +77,10 @@ class FakeHydroApiService extends HydroApiService {
       deviceState: DeviceState(
         pumpOn: true,
         lightOn: false,
+      ),
+      runtimeStatus: RuntimeStatus(
+        isBackendReachable: true,
+        isDeviceOnline: true,
       ),
     );
   }

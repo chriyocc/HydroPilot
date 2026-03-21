@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:home_fi/app/models/device_state.dart';
+import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/models/sensor_data.dart';
 import 'package:home_fi/app/modules/home/controllers/home_controller.dart';
+import 'package:home_fi/app/routes/app_pages.dart';
 import 'package:home_fi/app/theme/color_theme.dart';
 import 'package:home_fi/app/theme/text_theme.dart';
 
@@ -21,7 +23,8 @@ class DashboardView extends GetView<HomeController> {
             children: [
               _DashboardHeader(
                 statusMessage: controller.statusMessage,
-                deviceIp: controller.settings.deviceIp,
+                backendBaseUrl: controller.settings.backendBaseUrl,
+                runtimeStatus: controller.runtimeStatus,
               ),
               const SizedBox(height: 24),
               Text(
@@ -55,15 +58,27 @@ class DashboardView extends GetView<HomeController> {
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.statusMessage,
-    required this.deviceIp,
+    required this.backendBaseUrl,
+    required this.runtimeStatus,
   });
 
   final String? statusMessage;
-  final String deviceIp;
+  final String backendBaseUrl;
+  final RuntimeStatus runtimeStatus;
 
   @override
   Widget build(BuildContext context) {
-    final isOnline = statusMessage == null;
+    final backendLabel = runtimeStatus.isBackendReachable
+        ? 'Backend Reachable'
+        : 'Backend Unreachable';
+    final deviceLabel = runtimeStatus.isDeviceOnline == true
+        ? 'Device Online'
+        : runtimeStatus.isDeviceOnline == false
+            ? 'Device Offline'
+            : 'Device Unknown';
+    final streamLabel = runtimeStatus.isStreamConnected
+        ? 'Live Stream Connected'
+        : 'Live Stream Reconnecting';
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -102,14 +117,33 @@ class _DashboardHeader extends StatelessWidget {
             runSpacing: 10,
             children: [
               _StatusChip(
-                label: isOnline ? 'Controller Online' : 'Controller Offline',
-                color: isOnline ? GFTheme.success : GFTheme.warning,
+                label: backendLabel,
+                color: runtimeStatus.isBackendReachable
+                    ? GFTheme.success
+                    : GFTheme.warning,
               ),
               _StatusChip(
-                label: deviceIp,
-                color: Theme.of(context).colorScheme.primary,
+                label: deviceLabel,
+                color: runtimeStatus.isDeviceOnline == true
+                    ? GFTheme.success
+                    : Theme.of(context).colorScheme.primary,
+              ),
+              _StatusChip(
+                label: streamLabel,
+                color: runtimeStatus.isStreamConnected
+                    ? GFTheme.success
+                    : GFTheme.warning,
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            backendBaseUrl.isEmpty
+                ? 'Backend URL not configured.'
+                : backendBaseUrl,
+            style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           if (statusMessage != null) ...[
             const SizedBox(height: 14),
@@ -120,6 +154,15 @@ class _DashboardHeader extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => Get.toNamed(Routes.MAINTENANCE),
+            icon: const Icon(Icons.build_circle_outlined),
+            label: const Text('Setup / Maintenance'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(46),
+            ),
+          ),
         ],
       ),
     );

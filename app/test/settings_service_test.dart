@@ -18,15 +18,36 @@ void main() {
   test('settings service persists hydropilot settings', () async {
     final service = SettingsService(GetStorage('settings_service_test'));
 
-    final settings = AppSettings(
-      deviceIp: '192.168.1.44',
-      mqttBrokerIp: '192.168.1.50',
-      topicPrefix: 'hydro',
+    const settings = AppSettings(
+      backendBaseUrl: 'http://192.168.1.44:3000',
+      maintenanceDeviceIp: '192.168.1.50',
       refreshInterval: 8,
     );
 
     await service.saveSettings(settings);
 
     expect(service.loadSettings(), settings);
+  });
+
+  test('settings service migrates old device settings to empty backend url',
+      () {
+    final storage = GetStorage('settings_service_test');
+    storage.write('hydropilot_settings', {
+      'deviceIp': '192.168.1.44',
+      'mqttBrokerIp': '192.168.1.50',
+      'topicPrefix': 'hydro',
+      'refreshInterval': 8,
+    });
+
+    final service = SettingsService(storage);
+
+    expect(
+      service.loadSettings(),
+      const AppSettings(
+        backendBaseUrl: '',
+        maintenanceDeviceIp: '',
+        refreshInterval: 8,
+      ),
+    );
   });
 }

@@ -14,28 +14,22 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   late final HomeController controller;
-  late final TextEditingController deviceIpController;
-  late final TextEditingController mqttBrokerController;
-  late final TextEditingController topicPrefixController;
-  late final TextEditingController refreshIntervalController;
+  late final TextEditingController backendBaseUrlController;
+  late final TextEditingController maintenanceDeviceIpController;
 
   @override
   void initState() {
     super.initState();
     controller = Get.find<HomeController>();
-    deviceIpController = TextEditingController();
-    mqttBrokerController = TextEditingController();
-    topicPrefixController = TextEditingController();
-    refreshIntervalController = TextEditingController();
+    backendBaseUrlController = TextEditingController();
+    maintenanceDeviceIpController = TextEditingController();
     _syncFromSettings(controller.settings);
   }
 
   @override
   void dispose() {
-    deviceIpController.dispose();
-    mqttBrokerController.dispose();
-    topicPrefixController.dispose();
-    refreshIntervalController.dispose();
+    backendBaseUrlController.dispose();
+    maintenanceDeviceIpController.dispose();
     super.dispose();
   }
 
@@ -57,7 +51,7 @@ class _SettingsViewState extends State<SettingsView> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Configure controller address, topic prefix, and refresh timing for the MVP.',
+              'Configure the backend URL for runtime status, commands, and live updates.',
               style: HomeFiTextTheme.kBodyTextStyle.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -67,33 +61,10 @@ class _SettingsViewState extends State<SettingsView> {
               child: Column(
                 children: [
                   TextField(
-                    controller: deviceIpController,
+                    controller: backendBaseUrlController,
                     decoration: const InputDecoration(
-                      labelText: 'Device IP',
-                      hintText: '192.168.4.1',
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: mqttBrokerController,
-                    decoration: const InputDecoration(
-                      labelText: 'MQTT Broker IP',
-                      hintText: 'Optional for later',
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: topicPrefixController,
-                    decoration: const InputDecoration(
-                      labelText: 'Topic Prefix',
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: refreshIntervalController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Refresh Interval (seconds)',
+                      labelText: 'Backend Base URL',
+                      hintText: 'http://192.168.1.44:3000',
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -119,28 +90,62 @@ class _SettingsViewState extends State<SettingsView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'WiFi Setup',
+                    'Setup / Maintenance',
                     style: HomeFiTextTheme.kSub2HeadTextStyle.copyWith(
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Send WiFi credentials to the ESP32 when it is running in AP mode.',
+                    'Use this only for onboarding, recovery, and direct local diagnostics. Runtime monitoring and control still go through the backend.',
                     style: HomeFiTextTheme.kBodyTextStyle.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  OutlinedButton(
-                    onPressed: () => Get.toNamed(Routes.WIFI_SETUP),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                  TextField(
+                    controller: maintenanceDeviceIpController,
+                    decoration: const InputDecoration(
+                      labelText: 'Saved Local Device IP',
+                      hintText: '192.168.1.50',
                     ),
-                    child: const Text('Open WiFi Setup'),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'AP mode always uses 192.168.4.1. LAN maintenance uses the saved local IP only.',
+                    style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _saveMaintenanceSettings,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: const Text('Save Local IP'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Get.toNamed(Routes.MAINTENANCE),
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: const Text('Open Setup / Maintenance'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -152,18 +157,8 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   void _saveSettings() {
-    final refreshInterval = int.tryParse(refreshIntervalController.text.trim());
     final settings = controller.settings.copyWith(
-      deviceIp: deviceIpController.text.trim().isEmpty
-          ? controller.settings.deviceIp
-          : deviceIpController.text.trim(),
-      mqttBrokerIp: mqttBrokerController.text.trim(),
-      topicPrefix: topicPrefixController.text.trim().isEmpty
-          ? controller.settings.topicPrefix
-          : topicPrefixController.text.trim(),
-      refreshInterval: refreshInterval != null && refreshInterval > 0
-          ? refreshInterval
-          : controller.settings.refreshInterval,
+      backendBaseUrl: backendBaseUrlController.text.trim(),
     );
 
     controller.updateSettings(settings);
@@ -172,10 +167,14 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   void _syncFromSettings(AppSettings settings) {
-    deviceIpController.text = settings.deviceIp;
-    mqttBrokerController.text = settings.mqttBrokerIp;
-    topicPrefixController.text = settings.topicPrefix;
-    refreshIntervalController.text = settings.refreshInterval.toString();
+    backendBaseUrlController.text = settings.backendBaseUrl;
+    maintenanceDeviceIpController.text = settings.maintenanceDeviceIp;
+  }
+
+  void _saveMaintenanceSettings() {
+    controller.updateMaintenanceDeviceIp(maintenanceDeviceIpController.text);
+    FocusScope.of(context).unfocus();
+    Get.snackbar('Maintenance settings saved', 'Local device IP updated.');
   }
 }
 

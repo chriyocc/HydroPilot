@@ -1,3 +1,5 @@
+const _noSensorDataChange = Object();
+
 class SensorData {
   const SensorData({
     this.ph,
@@ -12,16 +14,20 @@ class SensorData {
   final double? waterLevel;
 
   SensorData copyWith({
-    double? ph,
-    double? ec,
-    double? waterTemperature,
-    double? waterLevel,
+    Object? ph = _noSensorDataChange,
+    Object? ec = _noSensorDataChange,
+    Object? waterTemperature = _noSensorDataChange,
+    Object? waterLevel = _noSensorDataChange,
   }) {
     return SensorData(
-      ph: ph ?? this.ph,
-      ec: ec ?? this.ec,
-      waterTemperature: waterTemperature ?? this.waterTemperature,
-      waterLevel: waterLevel ?? this.waterLevel,
+      ph: identical(ph, _noSensorDataChange) ? this.ph : ph as double?,
+      ec: identical(ec, _noSensorDataChange) ? this.ec : ec as double?,
+      waterTemperature: identical(waterTemperature, _noSensorDataChange)
+          ? this.waterTemperature
+          : waterTemperature as double?,
+      waterLevel: identical(waterLevel, _noSensorDataChange)
+          ? this.waterLevel
+          : waterLevel as double?,
     );
   }
 }

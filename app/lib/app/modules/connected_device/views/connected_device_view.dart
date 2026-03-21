@@ -32,7 +32,7 @@ class ConnectedDeviceView extends GetView<HomeController> {
               label: 'Pump',
               subtitle: 'Manual relay control',
               value: controller.deviceState.pumpOn ?? false,
-              enabled: !controller.isPerformingAction,
+              enabled: !controller.isCommandPending(CommandType.pump),
               onChanged: controller.togglePump,
             ),
             const SizedBox(height: 14),
@@ -40,7 +40,7 @@ class ConnectedDeviceView extends GetView<HomeController> {
               label: 'Grow Light',
               subtitle: 'Supplemental lighting',
               value: controller.deviceState.lightOn ?? false,
-              enabled: !controller.isPerformingAction,
+              enabled: !controller.isCommandPending(CommandType.light),
               onChanged: controller.toggleGrowLight,
             ),
             const SizedBox(height: 24),
@@ -56,18 +56,20 @@ class ConnectedDeviceView extends GetView<HomeController> {
                 Expanded(
                   child: _ActionButton(
                     label: 'Dose Nutrient A',
-                    onPressed: controller.isPerformingAction
-                        ? null
-                        : controller.doseNutrientA,
+                    onPressed:
+                        controller.isCommandPending(CommandType.nutrientA)
+                            ? null
+                            : controller.doseNutrientA,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _ActionButton(
                     label: 'Dose Nutrient B',
-                    onPressed: controller.isPerformingAction
-                        ? null
-                        : controller.doseNutrientB,
+                    onPressed:
+                        controller.isCommandPending(CommandType.nutrientB)
+                            ? null
+                            : controller.doseNutrientB,
                   ),
                 ),
               ],

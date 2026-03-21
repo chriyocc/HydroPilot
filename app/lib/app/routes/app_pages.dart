@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:home_fi/app/modules/home/bindings/home_binding.dart';
 import 'package:home_fi/app/modules/home/views/home_view.dart';
+import 'package:home_fi/app/modules/home/views/maintenance_view.dart';
 import 'package:home_fi/app/modules/home/views/wifi_setup_view.dart';
 import 'package:home_fi/app/modules/splash_screen/views/splash_screen_view.dart';
 
@@ -22,6 +23,10 @@ class AppPages {
     GetPage(
       name: _Paths.WIFI_SETUP,
       page: () => WifiSetupView(),
+    ),
+    GetPage(
+      name: _Paths.MAINTENANCE,
+      page: () => const MaintenanceView(),
     ),
   ];
 }

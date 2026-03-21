@@ -1,57 +1,47 @@
 class AppSettings {
   const AppSettings({
-    required this.deviceIp,
-    required this.mqttBrokerIp,
-    required this.topicPrefix,
+    required this.backendBaseUrl,
+    required this.maintenanceDeviceIp,
     required this.refreshInterval,
   });
 
-  final String deviceIp;
-  final String mqttBrokerIp;
-  final String topicPrefix;
+  final String backendBaseUrl;
+  final String maintenanceDeviceIp;
   final int refreshInterval;
 
   factory AppSettings.defaults() {
     return const AppSettings(
-      deviceIp: '192.168.4.1',
-      mqttBrokerIp: '',
-      topicPrefix: 'hydro',
-      refreshInterval: 5,
+      backendBaseUrl: '',
+      maintenanceDeviceIp: '',
+      refreshInterval: 0,
     );
   }
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
-      deviceIp: (json['deviceIp'] as String?)?.trim().isNotEmpty == true
-          ? json['deviceIp'] as String
-          : '192.168.4.1',
-      mqttBrokerIp: (json['mqttBrokerIp'] as String?) ?? '',
-      topicPrefix: (json['topicPrefix'] as String?)?.trim().isNotEmpty == true
-          ? json['topicPrefix'] as String
-          : 'hydro',
-      refreshInterval: (json['refreshInterval'] as int?) ?? 5,
+      backendBaseUrl: (json['backendBaseUrl'] as String?)?.trim() ?? '',
+      maintenanceDeviceIp:
+          (json['maintenanceDeviceIp'] as String?)?.trim() ?? '',
+      refreshInterval: (json['refreshInterval'] as int?) ?? 0,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'deviceIp': deviceIp,
-      'mqttBrokerIp': mqttBrokerIp,
-      'topicPrefix': topicPrefix,
+      'backendBaseUrl': backendBaseUrl,
+      'maintenanceDeviceIp': maintenanceDeviceIp,
       'refreshInterval': refreshInterval,
     };
   }
 
   AppSettings copyWith({
-    String? deviceIp,
-    String? mqttBrokerIp,
-    String? topicPrefix,
+    String? backendBaseUrl,
+    String? maintenanceDeviceIp,
     int? refreshInterval,
   }) {
     return AppSettings(
-      deviceIp: deviceIp ?? this.deviceIp,
-      mqttBrokerIp: mqttBrokerIp ?? this.mqttBrokerIp,
-      topicPrefix: topicPrefix ?? this.topicPrefix,
+      backendBaseUrl: backendBaseUrl ?? this.backendBaseUrl,
+      maintenanceDeviceIp: maintenanceDeviceIp ?? this.maintenanceDeviceIp,
       refreshInterval: refreshInterval ?? this.refreshInterval,
     );
   }
@@ -63,16 +53,14 @@ class AppSettings {
     }
 
     return other is AppSettings &&
-        other.deviceIp == deviceIp &&
-        other.mqttBrokerIp == mqttBrokerIp &&
-        other.topicPrefix == topicPrefix &&
+        other.backendBaseUrl == backendBaseUrl &&
+        other.maintenanceDeviceIp == maintenanceDeviceIp &&
         other.refreshInterval == refreshInterval;
   }
 
   @override
   int get hashCode =>
-      deviceIp.hashCode ^
-      mqttBrokerIp.hashCode ^
-      topicPrefix.hashCode ^
+      backendBaseUrl.hashCode ^
+      maintenanceDeviceIp.hashCode ^
       refreshInterval.hashCode;
 }

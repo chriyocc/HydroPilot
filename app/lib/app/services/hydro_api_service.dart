@@ -2,16 +2,86 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:home_fi/app/models/device_state.dart';
+import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/models/sensor_data.dart';
 
 class HydroStatusSnapshot {
   const HydroStatusSnapshot({
     required this.sensorData,
     required this.deviceState,
+    required this.runtimeStatus,
   });
 
   final SensorData sensorData;
   final DeviceState deviceState;
+  final RuntimeStatus runtimeStatus;
+
+  factory HydroStatusSnapshot.fromBackendPayload(
+    Map<String, dynamic> payload, {
+    bool isStreamConnected = false,
+  }) {
+    final availability = HydroApiService._readMap(payload, 'availability');
+    final sensors = HydroApiService._readMap(payload, 'sensors');
+    final deviceState = HydroApiService._readMap(payload, 'deviceState');
+    final freshness = HydroApiService._readMap(payload, 'freshness');
+
+    return HydroStatusSnapshot(
+      sensorData: SensorData(
+        ph: HydroApiService._readDouble(sensors, ['ph']),
+        ec: HydroApiService._readDouble(sensors, ['ec']),
+        waterTemperature:
+            HydroApiService._readDouble(sensors, ['waterTemperature']),
+        waterLevel: HydroApiService._readDouble(sensors, ['waterLevel']),
+      ),
+      deviceState: DeviceState(
+        pumpOn: HydroApiService._readBool(deviceState, ['pumpOn']),
+        lightOn: HydroApiService._readBool(deviceState, ['lightOn']),
+      ),
+      runtimeStatus: RuntimeStatus(
+        isBackendReachable: true,
+        isDeviceOnline: HydroApiService._readBool(availability, ['online']),
+        isStreamConnected: isStreamConnected,
+        isTelemetryStale:
+            HydroApiService._readBool(freshness, ['staleTelemetry']) ?? false,
+        isStateStale:
+            HydroApiService._readBool(freshness, ['staleState']) ?? false,
+      ),
+    );
+  }
+}
+
+class HydroCommandAccepted {
+  const HydroCommandAccepted({
+    required this.requestId,
+    required this.status,
+  });
+
+  final String requestId;
+  final String status;
+}
+
+class HydroSseEvent {
+  const HydroSseEvent({
+    required this.name,
+    required this.payload,
+  });
+
+  final String name;
+  final Map<String, dynamic> payload;
+}
+
+class LocalMaintenanceHealth {
+  const LocalMaintenanceHealth({
+    required this.isReachable,
+    required this.mode,
+    required this.baseUrl,
+    this.details = const {},
+  });
+
+  final bool isReachable;
+  final String mode;
+  final String baseUrl;
+  final Map<String, dynamic> details;
 }
 
 class HydroApiService {
@@ -24,48 +94,119 @@ class HydroApiService {
   final http.Client _client;
   final Duration _requestTimeout;
 
-  Future<HydroStatusSnapshot> fetchStatus(String deviceIp) async {
+  Future<HydroStatusSnapshot> fetchStatus(String backendBaseUrl) async {
     final response = await _client
-        .get(_buildUri(deviceIp, '/status'))
+        .get(_buildBackendUri(backendBaseUrl, '/api/device/status'))
         .timeout(_requestTimeout);
     _ensureSuccess(response);
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return HydroStatusSnapshot.fromBackendPayload(payload);
+  }
 
-    return HydroStatusSnapshot(
-      sensorData: SensorData(
-        ph: _readDouble(payload, ['ph']),
-        ec: _readDouble(payload, ['ec']),
-        waterTemperature: _readDouble(
-          payload,
-          ['waterTemperature', 'water_temperature', 'temp', 'temperature'],
-        ),
-        waterLevel: _readDouble(
-          payload,
-          ['waterLevel', 'water_level', 'level'],
-        ),
-      ),
-      deviceState: DeviceState(
-        pumpOn: _readBool(payload, ['pumpOn', 'pump_on', 'pump']),
-        lightOn: _readBool(payload, ['lightOn', 'light_on', 'light']),
-      ),
+  Stream<HydroSseEvent> openEventStream(String backendBaseUrl) async* {
+    final request = http.Request(
+      'GET',
+      _buildBackendUri(backendBaseUrl, '/api/device/events'),
+    );
+    request.headers['Accept'] = 'text/event-stream';
+
+    final response = await _client.send(request).timeout(_requestTimeout);
+    _ensureStreamSuccess(response);
+
+    String? currentEventName;
+    final currentData = StringBuffer();
+
+    await for (final line in response.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())) {
+      if (line.isEmpty) {
+        if (currentEventName != null && currentData.isNotEmpty) {
+          yield HydroSseEvent(
+            name: currentEventName!,
+            payload: jsonDecode(currentData.toString()) as Map<String, dynamic>,
+          );
+        }
+        currentEventName = null;
+        currentData.clear();
+        continue;
+      }
+
+      if (line.startsWith('event:')) {
+        currentEventName = line.substring(6).trim();
+        continue;
+      }
+
+      if (line.startsWith('data:')) {
+        if (currentData.isNotEmpty) {
+          currentData.write('\n');
+        }
+        currentData.write(line.substring(5).trim());
+      }
+    }
+  }
+
+  Future<HydroCommandAccepted> setPump(String backendBaseUrl, bool on) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/pump',
+      {'on': on},
     );
   }
 
-  Future<void> setPump(String deviceIp, bool on) {
-    return _postJson(deviceIp, '/control/pump', {'on': on});
+  Future<HydroCommandAccepted> setGrowLight(String backendBaseUrl, bool on) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/light',
+      {'on': on},
+    );
   }
 
-  Future<void> setGrowLight(String deviceIp, bool on) {
-    return _postJson(deviceIp, '/control/light', {'on': on});
+  Future<HydroCommandAccepted> doseNutrientA(String backendBaseUrl) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/nutrient/a',
+      {'dose': true},
+    );
   }
 
-  Future<void> doseNutrientA(String deviceIp) {
-    return _postJson(deviceIp, '/control/nutrient/a', {'dose': true});
+  Future<HydroCommandAccepted> doseNutrientB(String backendBaseUrl) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/nutrient/b',
+      {'dose': true},
+    );
   }
 
-  Future<void> doseNutrientB(String deviceIp) {
-    return _postJson(deviceIp, '/control/nutrient/b', {'dose': true});
+  Future<LocalMaintenanceHealth> fetchLocalHealth(String baseUrl) async {
+    final response = await _client
+        .get(_buildLocalUri(baseUrl, '/health'))
+        .timeout(_requestTimeout);
+    _ensureSuccess(response);
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return LocalMaintenanceHealth(
+      isReachable: true,
+      mode: payload['mode'] as String? ?? 'maintenance',
+      baseUrl: baseUrl,
+      details: payload,
+    );
+  }
+
+  Future<Map<String, dynamic>?> fetchLocalConfig(String baseUrl) async {
+    final response = await _client
+        .get(_buildLocalUri(baseUrl, '/config'))
+        .timeout(_requestTimeout);
+    _ensureSuccess(response);
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>?> fetchLocalDebugStatus(String baseUrl) async {
+    final response = await _client
+        .get(_buildLocalUri(baseUrl, '/debug/status'))
+        .timeout(_requestTimeout);
+    _ensureSuccess(response);
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Future<void> configureWifi({
@@ -82,23 +223,39 @@ class HydroApiService {
     _ensureSuccess(response);
   }
 
-  Future<void> _postJson(
-    String deviceIp,
+  Future<HydroCommandAccepted> _postCommand(
+    String backendBaseUrl,
     String path,
     Map<String, dynamic> body,
   ) async {
     final response = await _client
         .post(
-          _buildUri(deviceIp, path),
+          _buildBackendUri(backendBaseUrl, path),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
         )
         .timeout(_requestTimeout);
     _ensureSuccess(response);
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return HydroCommandAccepted(
+      requestId: payload['requestId'] as String,
+      status: payload['status'] as String? ?? 'accepted',
+    );
   }
 
-  Uri _buildUri(String deviceIp, String path) {
-    return Uri.parse('http://$deviceIp$path');
+  Uri _buildBackendUri(String backendBaseUrl, String path) {
+    final normalizedBaseUrl = backendBaseUrl.endsWith('/')
+        ? backendBaseUrl.substring(0, backendBaseUrl.length - 1)
+        : backendBaseUrl;
+    return Uri.parse('$normalizedBaseUrl$path');
+  }
+
+  Uri _buildLocalUri(String baseUrl, String path) {
+    final normalizedBaseUrl = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    return Uri.parse('$normalizedBaseUrl$path');
   }
 
   void _ensureSuccess(http.Response response) {
@@ -109,7 +266,29 @@ class HydroApiService {
     throw Exception('Request failed with status ${response.statusCode}');
   }
 
-  double? _readDouble(Map<String, dynamic> payload, List<String> keys) {
+  void _ensureStreamSuccess(http.StreamedResponse response) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return;
+    }
+
+    throw Exception('Request failed with status ${response.statusCode}');
+  }
+
+  static Map<String, dynamic> _readMap(
+    Map<String, dynamic> payload,
+    String key,
+  ) {
+    final value = payload[key];
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+    return const {};
+  }
+
+  static double? _readDouble(Map<String, dynamic> payload, List<String> keys) {
     for (final key in keys) {
       final value = payload[key];
       if (value is num) {
@@ -122,7 +301,7 @@ class HydroApiService {
     return null;
   }
 
-  bool? _readBool(Map<String, dynamic> payload, List<String> keys) {
+  static bool? _readBool(Map<String, dynamic> payload, List<String> keys) {
     for (final key in keys) {
       final value = payload[key];
       if (value is bool) {
@@ -136,9 +315,7 @@ class HydroApiService {
         if (normalized == 'true' || normalized == 'on' || normalized == '1') {
           return true;
         }
-        if (normalized == 'false' ||
-            normalized == 'off' ||
-            normalized == '0') {
+        if (normalized == 'false' || normalized == 'off' || normalized == '0') {
           return false;
         }
       }
