@@ -20,7 +20,6 @@ void main() {
 
     const settings = AppSettings(
       backendBaseUrl: 'http://192.168.1.44:3000',
-      maintenanceDeviceIp: '192.168.1.50',
       refreshInterval: 8,
     );
 
@@ -45,7 +44,6 @@ void main() {
       service.loadSettings(),
       const AppSettings(
         backendBaseUrl: '',
-        maintenanceDeviceIp: '',
         refreshInterval: 8,
       ),
     );

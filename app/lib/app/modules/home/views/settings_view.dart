@@ -15,21 +15,18 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late final HomeController controller;
   late final TextEditingController backendBaseUrlController;
-  late final TextEditingController maintenanceDeviceIpController;
 
   @override
   void initState() {
     super.initState();
     controller = Get.find<HomeController>();
     backendBaseUrlController = TextEditingController();
-    maintenanceDeviceIpController = TextEditingController();
     _syncFromSettings(controller.settings);
   }
 
   @override
   void dispose() {
     backendBaseUrlController.dispose();
-    maintenanceDeviceIpController.dispose();
     super.dispose();
   }
 
@@ -90,62 +87,38 @@ class _SettingsViewState extends State<SettingsView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Setup / Maintenance',
+                    'Device Setup',
                     style: HomeFiTextTheme.kSub2HeadTextStyle.copyWith(
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Use this only for onboarding, recovery, and direct local diagnostics. Runtime monitoring and control still go through the backend.',
+                    'Use this for onboarding or recovery when the controller is broadcasting its setup access point.',
                     style: HomeFiTextTheme.kBodyTextStyle.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: maintenanceDeviceIpController,
-                    decoration: const InputDecoration(
-                      labelText: 'Saved Local Device IP',
-                      hintText: '192.168.1.50',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   Text(
-                    'AP mode always uses 192.168.4.1. LAN maintenance uses the saved local IP only.',
+                    'Connect your phone to the device AP, then send Wi-Fi credentials to `192.168.4.1` to move the controller onto your network.',
                     style: HomeFiTextTheme.kBodyTextStyle.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _saveMaintenanceSettings,
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                          ),
-                          child: const Text('Save Local IP'),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Get.toNamed(Routes.WIFI_SETUP),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => Get.toNamed(Routes.MAINTENANCE),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                          ),
-                          child: const Text('Open Setup / Maintenance'),
-                        ),
-                      ),
-                    ],
+                      child: const Text('Open Device Setup'),
+                    ),
                   ),
                 ],
               ),
@@ -168,13 +141,6 @@ class _SettingsViewState extends State<SettingsView> {
 
   void _syncFromSettings(AppSettings settings) {
     backendBaseUrlController.text = settings.backendBaseUrl;
-    maintenanceDeviceIpController.text = settings.maintenanceDeviceIp;
-  }
-
-  void _saveMaintenanceSettings() {
-    controller.updateMaintenanceDeviceIp(maintenanceDeviceIpController.text);
-    FocusScope.of(context).unfocus();
-    Get.snackbar('Maintenance settings saved', 'Local device IP updated.');
   }
 }
 

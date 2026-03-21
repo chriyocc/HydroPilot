@@ -28,19 +28,19 @@ class _WifiSetupViewState extends State<WifiSetupView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('WiFi Setup')),
+      appBar: AppBar(title: const Text('Device Setup')),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           Text(
-            'Connect ESP32 to WiFi',
+            'Connect the controller to Wi-Fi',
             style: HomeFiTextTheme.kHeadTextStyle.copyWith(
               color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'The controller should be in AP mode and reachable at 192.168.4.1 before you send credentials.',
+            'Join the controller access point first. This recovery flow sends your network credentials to `192.168.4.1`.',
             style: HomeFiTextTheme.kBodyTextStyle.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -112,7 +112,7 @@ class _WifiSetupViewState extends State<WifiSetupView> {
       );
       if (mounted) {
         Get.snackbar(
-          'WiFi setup sent',
+          'Setup request sent',
           'Credentials posted to 192.168.4.1.',
         );
         Navigator.of(context).pop();
@@ -121,7 +121,7 @@ class _WifiSetupViewState extends State<WifiSetupView> {
       if (mounted) {
         Get.snackbar(
           'Setup failed',
-          'Unable to send WiFi credentials to the controller.',
+          'Unable to send Wi-Fi credentials to the controller.',
         );
       }
     } finally {

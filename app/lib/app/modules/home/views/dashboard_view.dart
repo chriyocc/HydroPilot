@@ -4,12 +4,13 @@ import 'package:home_fi/app/models/device_state.dart';
 import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/models/sensor_data.dart';
 import 'package:home_fi/app/modules/home/controllers/home_controller.dart';
-import 'package:home_fi/app/routes/app_pages.dart';
 import 'package:home_fi/app/theme/color_theme.dart';
 import 'package:home_fi/app/theme/text_theme.dart';
 
 class DashboardView extends GetView<HomeController> {
   const DashboardView({super.key});
+
+  static const _motionDuration = Duration(milliseconds: 220);
 
   @override
   Widget build(BuildContext context) {
@@ -80,8 +81,10 @@ class _DashboardHeader extends StatelessWidget {
         ? 'Live Stream Connected'
         : 'Live Stream Reconnecting';
 
-    return Container(
+    return AnimatedContainer(
+      duration: DashboardView._motionDuration,
       padding: const EdgeInsets.all(22),
+      curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(22),
@@ -154,15 +157,6 @@ class _DashboardHeader extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: () => Get.toNamed(Routes.MAINTENANCE),
-            icon: const Icon(Icons.build_circle_outlined),
-            label: const Text('Setup / Maintenance'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(46),
-            ),
-          ),
         ],
       ),
     );
@@ -203,19 +197,37 @@ class _SensorGrid extends StatelessWidget {
       ),
     ];
 
-    return GridView.builder(
-      itemCount: cards.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 14,
-        crossAxisSpacing: 14,
-        childAspectRatio: 1.05,
-      ),
-      itemBuilder: (context, index) {
-        final card = cards[index];
-        return _MetricCard(card: card, isLoading: isLoading);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useTwoColumns = constraints.maxWidth >= 290;
+        final cardWidth = useTwoColumns
+            ? (constraints.maxWidth - 14) / 2
+            : constraints.maxWidth;
+        final childAspectRatio = useTwoColumns
+            ? (cardWidth / 154).clamp(0.82, 1.05).toDouble()
+            : (cardWidth / 164).clamp(1.15, 1.65).toDouble();
+
+        return AnimatedSwitcher(
+          duration: DashboardView._motionDuration,
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: GridView.builder(
+            key: ValueKey('${constraints.maxWidth.round()}-$isLoading'),
+            itemCount: cards.length,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: useTwoColumns ? 2 : 1,
+              mainAxisSpacing: 14,
+              crossAxisSpacing: 14,
+              childAspectRatio: childAspectRatio,
+            ),
+            itemBuilder: (context, index) {
+              final card = cards[index];
+              return _MetricCard(card: card, isLoading: isLoading);
+            },
+          ),
+        );
       },
     );
   }
@@ -254,7 +266,9 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedContainer(
+      duration: DashboardView._motionDuration,
+      curve: Curves.easeOutCubic,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
@@ -263,7 +277,6 @@ class _MetricCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
             width: 42,
@@ -277,24 +290,59 @@ class _MetricCard extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary,
             ),
           ),
-          Text(
-            card.label,
-            style: HomeFiTextTheme.kBodyTextStyle.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          isLoading
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2.2),
-                )
-              : Text(
-                  card.value,
-                  style: HomeFiTextTheme.kSubHeadTextStyle.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface,
+          const SizedBox(height: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  card.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    height: 1.15,
                   ),
                 ),
+                const Spacer(),
+                AnimatedSwitcher(
+                  duration: DashboardView._motionDuration,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    final offsetAnimation = Tween<Offset>(
+                      begin: const Offset(0, 0.08),
+                      end: Offset.zero,
+                    ).animate(animation);
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: offsetAnimation,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: isLoading
+                      ? SizedBox(
+                          key: ValueKey('${card.label}-loading'),
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        )
+                      : Text(
+                          card.value,
+                          key: ValueKey('${card.label}-${card.value}'),
+                          style: HomeFiTextTheme.kSubHeadTextStyle.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -308,7 +356,9 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedContainer(
+      duration: DashboardView._motionDuration,
+      curve: Curves.easeOutCubic,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
@@ -379,7 +429,9 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedContainer(
+      duration: DashboardView._motionDuration,
+      curve: Curves.easeOutCubic,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),

@@ -2,7 +2,7 @@
     package="com.geekflow.home_fi">
    <uses-permission android:name="android.permission.INTERNET"/>
    <application
-        android:label="Home-Fi"
+        android:label="HydroPilot"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

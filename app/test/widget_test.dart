@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
+import 'package:flutter/material.dart';
 import 'package:home_fi/app/models/device_state.dart';
 import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/models/sensor_data.dart';
@@ -51,7 +52,11 @@ void main() {
     expect(find.text('Dashboard'), findsOneWidget);
     expect(find.text('Control'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Setup / Maintenance'), findsOneWidget);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Device Setup'), findsOneWidget);
   });
 
   testWidgets('app leaves splash and opens dashboard',
@@ -61,6 +66,46 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('System Dashboard'), findsOneWidget);
+  });
+
+  testWidgets('dashboard sensor cards stay within bounds on narrow screens',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        theme: appThemeData[AppTheme.hydroLight],
+        initialBinding: BindingsBuilder(
+          () {
+            Get.lazyPut<HomeController>(
+              () => HomeController(
+                apiService: FakeHydroApiService(),
+                enableAutoRefresh: false,
+              ),
+            );
+          },
+        ),
+        home: const HomeView(),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Water Temperature'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('splash screen shows HydroPilot branding before navigation',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('HydroPilot'), findsOneWidget);
+    expect(find.text('Hydroponic monitoring and control'), findsOneWidget);
   });
 }
 

@@ -9,7 +9,31 @@ class HomeView extends GetView<HomeController> {
   Widget build(BuildContext context) {
     return Obx(
       () => Scaffold(
-        body: SafeArea(child: controller.navBarSwitcher()),
+        body: SafeArea(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final offsetAnimation = Tween<Offset>(
+                begin: const Offset(0.02, 0),
+                end: Offset.zero,
+              ).animate(animation);
+
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: offsetAnimation,
+                  child: child,
+                ),
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey(controller.currentIndex),
+              child: controller.navBarSwitcher(),
+            ),
+          ),
+        ),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: controller.currentIndex,
           onTap: controller.setCurrentIndex,
