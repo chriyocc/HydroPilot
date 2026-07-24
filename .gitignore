@@ -36,3 +36,4 @@ firmware/esp32/.pio/
 firmware/esp32/.vscode/c_cpp_properties.json
 firmware/esp32/.vscode/launch.json
 firmware/esp32/.vscode/settings.json
+.omx/
