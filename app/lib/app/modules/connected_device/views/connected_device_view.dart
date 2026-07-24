@@ -53,11 +53,14 @@ class ConnectedDeviceView extends GetView<HomeController> {
               ],
             ),
             const SizedBox(height: 22),
+            _DosingHeadControls(
+              controller: controller,
+              isLocal: isLocal,
+            ),
             if (!isLocal) ...[
-              _RemoteDosingControls(controller: controller),
               const SizedBox(height: 22),
+              _RemoteDosingControls(controller: controller),
             ],
-            _LocalDosingControls(controller: controller),
           ],
         );
       },
@@ -130,23 +133,14 @@ class _ControlHeader extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _StatusPill(
-                label: isLocal ? 'Local Network' : 'Backend Mode',
-                icon: isLocal ? Icons.wifi_rounded : Icons.cloud_outlined,
-              ),
-              if (message != null)
-                _StatusPill(
-                  label: message!,
-                  icon: Icons.check_circle_outline_rounded,
-                  maxWidth: 250,
-                ),
-            ],
-          ),
+          if (message != null) ...[
+            const SizedBox(height: 16),
+            _StatusPill(
+              label: message!,
+              icon: Icons.check_circle_outline_rounded,
+              maxWidth: 250,
+            ),
+          ],
         ],
       ),
     );
@@ -266,10 +260,14 @@ class _RemoteDosingControls extends StatelessWidget {
   }
 }
 
-class _LocalDosingControls extends StatelessWidget {
-  const _LocalDosingControls({required this.controller});
+class _DosingHeadControls extends StatelessWidget {
+  const _DosingHeadControls({
+    required this.controller,
+    required this.isLocal,
+  });
 
   final HomeController controller;
+  final bool isLocal;
 
   @override
   Widget build(BuildContext context) {
@@ -277,47 +275,41 @@ class _LocalDosingControls extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionTitle(
-          label: 'Dosing Heads',
-          supportingText: 'Prime lines, set EC targets, and trigger doses.',
+          label: 'Dosing Station',
+          supportingText: isLocal
+              ? 'Direct ESP32 line priming, shot dosing, and combined EC target dosing.'
+              : 'Backend line priming, shot dosing, and combined EC target dosing.',
         ),
         const SizedBox(height: 12),
-        _ResponsiveControls(
-          children: [
-            _DosingHeadSection(
-              title: 'Head A',
-              icon: Icons.looks_one_rounded,
-              accentColor: Theme.of(context).colorScheme.primary,
-              targetEc: controller.targetEcA,
-              onTargetEcChanged: controller.setTargetEcA,
-              primeActive: controller.deviceState.primeAOn,
-              targetActive: controller.deviceState.targetDoseAOn,
-              shotActive: controller.deviceState.shotDoseAOn,
-              primePending: controller.isCommandPending(CommandType.primeA),
-              targetPending:
-                  controller.isCommandPending(CommandType.targetDoseA),
-              shotPending: controller.isCommandPending(CommandType.shotDoseA),
-              onPrime: controller.togglePrimeA,
-              onTargetDose: controller.toggleTargetDoseA,
-              onShotDose: controller.startShotDoseA,
-            ),
-            _DosingHeadSection(
-              title: 'Head B',
-              icon: Icons.looks_two_rounded,
-              accentColor: GFTheme.warning,
-              targetEc: controller.targetEcB,
-              onTargetEcChanged: controller.setTargetEcB,
-              primeActive: controller.deviceState.primeBOn,
-              targetActive: controller.deviceState.targetDoseBOn,
-              shotActive: controller.deviceState.shotDoseBOn,
-              primePending: controller.isCommandPending(CommandType.primeB),
-              targetPending:
-                  controller.isCommandPending(CommandType.targetDoseB),
-              shotPending: controller.isCommandPending(CommandType.shotDoseB),
-              onPrime: controller.togglePrimeB,
-              onTargetDose: controller.toggleTargetDoseB,
-              onShotDose: controller.startShotDoseB,
-            ),
-          ],
+        _ControlPanel(
+          icon: Icons.waterfall_chart_rounded,
+          title: 'Line Controls',
+          subtitle: 'Prime and shot dose each head independently.',
+          child: Column(
+            children: [
+              _DosingLineRow(
+                title: 'Head A',
+                accentColor: Theme.of(context).colorScheme.primary,
+                primeActive: controller.deviceState.primeAOn,
+                shotActive: controller.deviceState.shotDoseAOn,
+                primePending: controller.isCommandPending(CommandType.primeA),
+                shotPending: controller.isCommandPending(CommandType.shotDoseA),
+                onPrime: controller.togglePrimeA,
+                onShotDose: controller.startShotDoseA,
+              ),
+              const Divider(height: 24),
+              _DosingLineRow(
+                title: 'Head B',
+                accentColor: GFTheme.warning,
+                primeActive: controller.deviceState.primeBOn,
+                shotActive: controller.deviceState.shotDoseBOn,
+                primePending: controller.isCommandPending(CommandType.primeB),
+                shotPending: controller.isCommandPending(CommandType.shotDoseB),
+                onPrime: controller.togglePrimeB,
+                onShotDose: controller.startShotDoseB,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 14),
         _ControlPanel(
@@ -351,75 +343,98 @@ class _LocalDosingControls extends StatelessWidget {
   }
 }
 
-class _DosingHeadSection extends StatelessWidget {
-  const _DosingHeadSection({
+class _DosingLineRow extends StatelessWidget {
+  const _DosingLineRow({
     required this.title,
-    required this.icon,
     required this.accentColor,
-    required this.targetEc,
-    required this.onTargetEcChanged,
     required this.primeActive,
-    required this.targetActive,
     required this.shotActive,
     required this.primePending,
-    required this.targetPending,
     required this.shotPending,
     required this.onPrime,
-    required this.onTargetDose,
     required this.onShotDose,
   });
 
   final String title;
-  final IconData icon;
   final Color accentColor;
-  final double targetEc;
-  final ValueChanged<String> onTargetEcChanged;
   final bool? primeActive;
-  final bool? targetActive;
   final bool? shotActive;
   final bool primePending;
-  final bool targetPending;
   final bool shotPending;
   final VoidCallback onPrime;
-  final VoidCallback onTargetDose;
   final VoidCallback onShotDose;
 
   @override
   Widget build(BuildContext context) {
-    return _ControlPanel(
-      icon: icon,
-      title: title,
-      subtitle: 'Line prime, target dose, and shot dose.',
-      accentColor: accentColor,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useInlineButtons = constraints.maxWidth >= 360;
+        final buttons = [
           _ActionButton(
-            icon: primeActive == true ? Icons.stop_rounded : Icons.bolt_rounded,
-            label: primeActive == true ? 'Stop Prime Line' : 'Prime Line',
+            icon:
+                primeActive == true ? Icons.stop_rounded : Icons.bolt_outlined,
+            label: primeActive == true ? 'Stop Prime' : 'Prime',
             onPressed: primePending ? null : onPrime,
           ),
-          const SizedBox(height: 12),
-          _TargetEcField(
-            initialValue: targetEc,
-            onChanged: onTargetEcChanged,
-          ),
-          const SizedBox(height: 12),
-          _ActionButton(
-            icon: targetActive == true
-                ? Icons.stop_rounded
-                : Icons.track_changes_rounded,
-            label: targetActive == true ? 'Stop Target Dose' : 'Target Dose',
-            onPressed: targetPending ? null : onTargetDose,
-          ),
-          const SizedBox(height: 12),
           _ActionButton(
             icon: Icons.flash_on_rounded,
-            label: shotActive == true ? 'Shot Dose Running' : 'Shot Dose',
+            label: shotActive == true ? 'Shot Running' : 'Shot',
             onPressed: shotPending || shotActive == true ? null : onShotDose,
           ),
-        ],
-      ),
+        ];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    title.endsWith('A')
+                        ? Icons.looks_one_rounded
+                        : Icons.looks_two_rounded,
+                    size: 18,
+                    color: accentColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: HomeFiTextTheme.kSub2HeadTextStyle.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (useInlineButtons)
+              Row(
+                children: [
+                  Expanded(child: buttons[0]),
+                  const SizedBox(width: 10),
+                  Expanded(child: buttons[1]),
+                ],
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  buttons[0],
+                  const SizedBox(height: 10),
+                  buttons[1],
+                ],
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -430,19 +445,17 @@ class _ControlPanel extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.child,
-    this.accentColor,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final Widget child;
-  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final color = accentColor ?? colorScheme.primary;
+    final color = colorScheme.primary;
 
     return AnimatedContainer(
       duration: ConnectedDeviceView._motionDuration,

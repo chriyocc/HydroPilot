@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:home_fi/app/models/app_settings.dart';
+import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/modules/home/controllers/home_controller.dart';
 import 'package:home_fi/app/routes/app_pages.dart';
+import 'package:home_fi/app/theme/color_theme.dart';
 import 'package:home_fi/app/theme/text_theme.dart';
 
 class SettingsView extends StatefulWidget {
@@ -57,6 +59,12 @@ class _SettingsViewState extends State<SettingsView> {
               ),
             ),
             const SizedBox(height: 24),
+            _ConnectionStatusCard(
+              settings: controller.settings,
+              runtimeStatus: controller.runtimeStatus,
+              statusMessage: controller.statusMessage,
+            ),
+            const SizedBox(height: 18),
             _SettingsCard(
               child: Column(
                 children: [
@@ -176,6 +184,134 @@ class _SettingsViewState extends State<SettingsView> {
     selectedTransportMode = settings.transportMode;
     backendBaseUrlController.text = settings.backendBaseUrl;
     localDeviceBaseUrlController.text = settings.localDeviceBaseUrl;
+  }
+}
+
+class _ConnectionStatusCard extends StatelessWidget {
+  const _ConnectionStatusCard({
+    required this.settings,
+    required this.runtimeStatus,
+    required this.statusMessage,
+  });
+
+  final AppSettings settings;
+  final RuntimeStatus runtimeStatus;
+  final String? statusMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLocal = settings.transportMode == TransportMode.localNetwork;
+    final endpointUrl =
+        isLocal ? settings.localDeviceBaseUrl : settings.backendBaseUrl;
+    final backendLabel = runtimeStatus.isBackendReachable
+        ? (isLocal ? 'ESP32 Reachable' : 'Backend Reachable')
+        : (isLocal ? 'ESP32 Unreachable' : 'Backend Unreachable');
+    final deviceLabel = runtimeStatus.isDeviceOnline == true
+        ? 'Device Online'
+        : runtimeStatus.isDeviceOnline == false
+            ? 'Device Offline'
+            : 'Device Unknown';
+    final streamLabel = isLocal
+        ? 'Local Polling'
+        : runtimeStatus.isStreamConnected
+            ? 'Live Stream Connected'
+            : 'Live Stream Reconnecting';
+
+    return _SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Connection Status',
+            style: HomeFiTextTheme.kSub2HeadTextStyle.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Live runtime connectivity for the active controller path.',
+            style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _StatusChip(
+                label: backendLabel,
+                color: runtimeStatus.isBackendReachable
+                    ? GFTheme.success
+                    : GFTheme.warning,
+              ),
+              _StatusChip(
+                label: deviceLabel,
+                color: runtimeStatus.isDeviceOnline == true
+                    ? GFTheme.success
+                    : Theme.of(context).colorScheme.primary,
+              ),
+              _StatusChip(
+                label: streamLabel,
+                color: isLocal || runtimeStatus.isStreamConnected
+                    ? GFTheme.success
+                    : GFTheme.warning,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            endpointUrl.isEmpty
+                ? (isLocal
+                    ? 'Local ESP32 URL not configured.'
+                    : 'Backend URL not configured.')
+                : endpointUrl,
+            style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (statusMessage != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              statusMessage!,
+              style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 }
 

@@ -59,8 +59,9 @@ class HomeController extends GetxController {
   bool get hasBackendConfigured => settings.backendBaseUrl.trim().isNotEmpty;
   bool get hasLocalDeviceConfigured =>
       settings.localDeviceBaseUrl.trim().isNotEmpty;
-  bool get hasActiveTransportConfigured =>
-      settings.usesLocalNetwork ? hasLocalDeviceConfigured : hasBackendConfigured;
+  bool get hasActiveTransportConfigured => settings.usesLocalNetwork
+      ? hasLocalDeviceConfigured
+      : hasBackendConfigured;
 
   AppSettings settings = AppSettings.defaults();
   SensorData sensorData = const SensorData();
@@ -113,7 +114,7 @@ class HomeController extends GetxController {
 
     if (showLoading) {
       isLoadingStatus = true;
-      update(['dashboard', 'control']);
+      update(['dashboard', 'control', 'settings']);
     }
 
     try {
@@ -131,7 +132,7 @@ class HomeController extends GetxController {
       _recomputeStatusMessage();
     } finally {
       isLoadingStatus = false;
-      update(['dashboard', 'control']);
+      update(['dashboard', 'control', 'settings']);
     }
   }
 
@@ -253,9 +254,8 @@ class HomeController extends GetxController {
           'Android did not connect to the controller Wi-Fi.',
         ProvisioningResultCode.connectionTimeout =>
           'Timed out waiting for the controller Wi-Fi.',
-        ProvisioningResultCode.connectionFailed =>
-          provisioningResult.message ??
-              'Unable to connect to the controller Wi-Fi.',
+        ProvisioningResultCode.connectionFailed => provisioningResult.message ??
+            'Unable to connect to the controller Wi-Fi.',
         ProvisioningResultCode.connected => lastActionMessage,
       };
       update(['control']);
@@ -293,7 +293,7 @@ class HomeController extends GetxController {
   Future<void> _loadRuntime() async {
     if (!hasActiveTransportConfigured) {
       _resetRuntimeState();
-      update(['dashboard', 'control']);
+      update(['dashboard', 'control', 'settings']);
       return;
     }
 
@@ -341,7 +341,7 @@ class HomeController extends GetxController {
       isStreamConnected: true,
     );
     _recomputeStatusMessage();
-    update(['dashboard', 'control']);
+    update(['dashboard', 'control', 'settings']);
 
     _eventSubscription =
         _apiService.openEventStream(settings.backendBaseUrl).listen(
@@ -394,7 +394,7 @@ class HomeController extends GetxController {
     }
 
     _recomputeStatusMessage();
-    update(['dashboard', 'control']);
+    update(['dashboard', 'control', 'settings']);
   }
 
   void _handleSseDisconnect([Object? _]) {
@@ -404,7 +404,7 @@ class HomeController extends GetxController {
 
     runtimeStatus = runtimeStatus.copyWith(isStreamConnected: false);
     _recomputeStatusMessage();
-    update(['dashboard', 'control']);
+    update(['dashboard', 'control', 'settings']);
     _scheduleReconnect();
   }
 
@@ -475,7 +475,8 @@ class HomeController extends GetxController {
 
   Future<void> startShotDoseA() {
     if (settings.usesLocalNetwork) {
-      return _runLocalToggle(type: CommandType.shotDoseA, device: 'shot_dose_a');
+      return _runLocalToggle(
+          type: CommandType.shotDoseA, device: 'shot_dose_a');
     }
 
     return _runCommand(
@@ -487,7 +488,8 @@ class HomeController extends GetxController {
 
   Future<void> startShotDoseB() {
     if (settings.usesLocalNetwork) {
-      return _runLocalToggle(type: CommandType.shotDoseB, device: 'shot_dose_b');
+      return _runLocalToggle(
+          type: CommandType.shotDoseB, device: 'shot_dose_b');
     }
 
     return _runCommand(
@@ -687,7 +689,7 @@ class HomeController extends GetxController {
   }) async {
     if (!hasBackendConfigured) {
       statusMessage = 'Set a backend URL in Settings.';
-      update(['dashboard', 'control']);
+      update(['dashboard', 'control', 'settings']);
       return;
     }
 
@@ -701,7 +703,7 @@ class HomeController extends GetxController {
     } catch (_) {
       lastActionMessage = 'Unable to send command to the backend.';
     } finally {
-      update(['dashboard', 'control']);
+      update(['dashboard', 'control', 'settings']);
     }
   }
 
@@ -711,7 +713,7 @@ class HomeController extends GetxController {
   }) async {
     if (!hasLocalDeviceConfigured) {
       statusMessage = 'Set a local ESP32 URL in Settings.';
-      update(['dashboard', 'control']);
+      update(['dashboard', 'control', 'settings']);
       return;
     }
 
@@ -733,7 +735,7 @@ class HomeController extends GetxController {
       _recomputeStatusMessage();
     } finally {
       _pendingCommandRequestIds.remove(type);
-      update(['dashboard', 'control']);
+      update(['dashboard', 'control', 'settings']);
     }
   }
 

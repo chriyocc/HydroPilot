@@ -149,7 +149,16 @@ class DeviceProvisioningChannel(
             finishPendingConnection(mapOf("code" to "connection_timeout"))
         }.also { handler.postDelayed(it, CONNECTION_TIMEOUT_MS) }
 
-        connectivityManager.requestNetwork(request, callback)
+        runCatching {
+            connectivityManager.requestNetwork(request, callback)
+        }.onFailure { error ->
+            finishPendingConnection(
+                mapOf(
+                    "code" to "connection_failed",
+                    "message" to (error.message ?: "Unable to request the Wi-Fi network."),
+                ),
+            )
+        }
     }
 
     private fun finishPendingConnection(response: Map<String, String>) {

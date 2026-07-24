@@ -2,9 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:home_fi/app/models/app_settings.dart';
 import 'package:home_fi/app/models/device_state.dart';
-import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/models/sensor_data.dart';
 import 'package:home_fi/app/modules/home/controllers/home_controller.dart';
 import 'package:home_fi/app/theme/color_theme.dart';
@@ -27,11 +25,6 @@ class DashboardView extends GetView<HomeController> {
             children: [
               _DashboardHeader(
                 statusMessage: controller.statusMessage,
-                endpointUrl: controller.settings.usesLocalNetwork
-                    ? controller.settings.localDeviceBaseUrl
-                    : controller.settings.backendBaseUrl,
-                transportMode: controller.settings.transportMode,
-                runtimeStatus: controller.runtimeStatus,
               ),
               const SizedBox(height: 24),
               Text(
@@ -41,18 +34,16 @@ class DashboardView extends GetView<HomeController> {
                 ),
               ),
               const SizedBox(height: 14),
+              _EcHistoryCard(
+                values: controller.ecHistory.ecValues,
+                periodMs: controller.ecHistory.periodMs,
+                windowMs: controller.ecHistory.windowMs,
+              ),
+              const SizedBox(height: 14),
               _SensorGrid(
                 sensorData: controller.sensorData,
                 isLoading: controller.isLoadingStatus,
               ),
-              if (controller.settings.usesLocalNetwork) ...[
-                const SizedBox(height: 24),
-                _EcHistoryCard(
-                  values: controller.ecHistory.ecValues,
-                  periodMs: controller.ecHistory.periodMs,
-                  windowMs: controller.ecHistory.windowMs,
-                ),
-              ],
               const SizedBox(height: 24),
               Text(
                 'Device States',
@@ -73,33 +64,12 @@ class DashboardView extends GetView<HomeController> {
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.statusMessage,
-    required this.endpointUrl,
-    required this.transportMode,
-    required this.runtimeStatus,
   });
 
   final String? statusMessage;
-  final String endpointUrl;
-  final TransportMode transportMode;
-  final RuntimeStatus runtimeStatus;
 
   @override
   Widget build(BuildContext context) {
-    final isLocal = transportMode == TransportMode.localNetwork;
-    final backendLabel = runtimeStatus.isBackendReachable
-        ? (isLocal ? 'ESP32 Reachable' : 'Backend Reachable')
-        : (isLocal ? 'ESP32 Unreachable' : 'Backend Unreachable');
-    final deviceLabel = runtimeStatus.isDeviceOnline == true
-        ? 'Device Online'
-        : runtimeStatus.isDeviceOnline == false
-            ? 'Device Offline'
-            : 'Device Unknown';
-    final streamLabel = isLocal
-        ? 'Local Polling'
-        : runtimeStatus.isStreamConnected
-            ? 'Live Stream Connected'
-            : 'Live Stream Reconnecting';
-
     return AnimatedContainer(
       duration: DashboardView._motionDuration,
       padding: const EdgeInsets.all(22),
@@ -133,44 +103,8 @@ class _DashboardHeader extends StatelessWidget {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _StatusChip(
-                label: backendLabel,
-                color: runtimeStatus.isBackendReachable
-                    ? GFTheme.success
-                    : GFTheme.warning,
-              ),
-              _StatusChip(
-                label: deviceLabel,
-                color: runtimeStatus.isDeviceOnline == true
-                    ? GFTheme.success
-                    : Theme.of(context).colorScheme.primary,
-              ),
-              _StatusChip(
-                label: streamLabel,
-                color: isLocal || runtimeStatus.isStreamConnected
-                    ? GFTheme.success
-                    : GFTheme.warning,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            endpointUrl.isEmpty
-                ? (isLocal
-                    ? 'Local ESP32 URL not configured.'
-                    : 'Backend URL not configured.')
-                : endpointUrl,
-            style: HomeFiTextTheme.kBodyTextStyle.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
           if (statusMessage != null) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Text(
               statusMessage!,
               style: HomeFiTextTheme.kBodyTextStyle.copyWith(
@@ -246,7 +180,7 @@ class _SensorGrid extends StatelessWidget {
             ? (constraints.maxWidth - 14) / 2
             : constraints.maxWidth;
         final childAspectRatio = useTwoColumns
-            ? (cardWidth / 154).clamp(0.82, 1.05).toDouble()
+            ? (cardWidth / 174).clamp(0.76, 0.96).toDouble()
             : (cardWidth / 164).clamp(1.15, 1.65).toDouble();
 
         return AnimatedSwitcher(
@@ -495,18 +429,47 @@ class _MetricCard extends StatelessWidget {
                             color: Theme.of(context).colorScheme.primary,
                           ),
                         )
-                      : Text(
-                          card.value,
+                      : _MetricValue(
                           key: ValueKey('${card.label}-${card.value}'),
-                          style: HomeFiTextTheme.kSubHeadTextStyle.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+                          value: card.value,
                         ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MetricValue extends StatelessWidget {
+  const _MetricValue({
+    super.key,
+    required this.value,
+  });
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: value,
+      child: SizedBox(
+        width: double.infinity,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+            style: HomeFiTextTheme.kSubHeadTextStyle.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        ),
       ),
     );
   }
