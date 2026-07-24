@@ -12,6 +12,14 @@ backend/node_modules/
 backend/dist/
 backend/.env
 
+# Remotion chart demo
+.pnpm-store/
+remotion-chart/node_modules/
+remotion-chart/out/
+remotion-chart/dist/
+remotion-chart/studio.log
+remotion-chart/studio.err
+
 # Flutter app
 app/.dart_tool/
 app/build/

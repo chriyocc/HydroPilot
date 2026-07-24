@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:home_fi/app/models/app_settings.dart';
 import 'package:home_fi/app/models/device_state.dart';
 import 'package:home_fi/app/models/runtime_status.dart';
 import 'package:home_fi/app/models/sensor_data.dart';
@@ -24,7 +27,10 @@ class DashboardView extends GetView<HomeController> {
             children: [
               _DashboardHeader(
                 statusMessage: controller.statusMessage,
-                backendBaseUrl: controller.settings.backendBaseUrl,
+                endpointUrl: controller.settings.usesLocalNetwork
+                    ? controller.settings.localDeviceBaseUrl
+                    : controller.settings.backendBaseUrl,
+                transportMode: controller.settings.transportMode,
                 runtimeStatus: controller.runtimeStatus,
               ),
               const SizedBox(height: 24),
@@ -39,6 +45,14 @@ class DashboardView extends GetView<HomeController> {
                 sensorData: controller.sensorData,
                 isLoading: controller.isLoadingStatus,
               ),
+              if (controller.settings.usesLocalNetwork) ...[
+                const SizedBox(height: 24),
+                _EcHistoryCard(
+                  values: controller.ecHistory.ecValues,
+                  periodMs: controller.ecHistory.periodMs,
+                  windowMs: controller.ecHistory.windowMs,
+                ),
+              ],
               const SizedBox(height: 24),
               Text(
                 'Device States',
@@ -59,27 +73,32 @@ class DashboardView extends GetView<HomeController> {
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.statusMessage,
-    required this.backendBaseUrl,
+    required this.endpointUrl,
+    required this.transportMode,
     required this.runtimeStatus,
   });
 
   final String? statusMessage;
-  final String backendBaseUrl;
+  final String endpointUrl;
+  final TransportMode transportMode;
   final RuntimeStatus runtimeStatus;
 
   @override
   Widget build(BuildContext context) {
+    final isLocal = transportMode == TransportMode.localNetwork;
     final backendLabel = runtimeStatus.isBackendReachable
-        ? 'Backend Reachable'
-        : 'Backend Unreachable';
+        ? (isLocal ? 'ESP32 Reachable' : 'Backend Reachable')
+        : (isLocal ? 'ESP32 Unreachable' : 'Backend Unreachable');
     final deviceLabel = runtimeStatus.isDeviceOnline == true
         ? 'Device Online'
         : runtimeStatus.isDeviceOnline == false
             ? 'Device Offline'
             : 'Device Unknown';
-    final streamLabel = runtimeStatus.isStreamConnected
-        ? 'Live Stream Connected'
-        : 'Live Stream Reconnecting';
+    final streamLabel = isLocal
+        ? 'Local Polling'
+        : runtimeStatus.isStreamConnected
+            ? 'Live Stream Connected'
+            : 'Live Stream Reconnecting';
 
     return AnimatedContainer(
       duration: DashboardView._motionDuration,
@@ -133,7 +152,7 @@ class _DashboardHeader extends StatelessWidget {
               ),
               _StatusChip(
                 label: streamLabel,
-                color: runtimeStatus.isStreamConnected
+                color: isLocal || runtimeStatus.isStreamConnected
                     ? GFTheme.success
                     : GFTheme.warning,
               ),
@@ -141,9 +160,11 @@ class _DashboardHeader extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            backendBaseUrl.isEmpty
-                ? 'Backend URL not configured.'
-                : backendBaseUrl,
+            endpointUrl.isEmpty
+                ? (isLocal
+                    ? 'Local ESP32 URL not configured.'
+                    : 'Backend URL not configured.')
+                : endpointUrl,
             style: HomeFiTextTheme.kBodyTextStyle.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -175,15 +196,18 @@ class _SensorGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cards = [
-      _MetricCardData(
-        label: 'pH',
-        icon: Icons.science_outlined,
-        value: _formatValue(sensorData.ph, suffix: ''),
-      ),
+      if (sensorData.ph != null)
+        _MetricCardData(
+          label: 'pH',
+          icon: Icons.science_outlined,
+          value: _formatValue(sensorData.ph, suffix: ''),
+        ),
       _MetricCardData(
         label: 'EC',
         icon: Icons.bolt_outlined,
-        value: _formatValue(sensorData.ec, suffix: ' mS/cm'),
+        value: sensorData.ec != null && sensorData.ec! > 20
+            ? _formatValue(sensorData.ec, suffix: ' uS/cm')
+            : _formatValue(sensorData.ec, suffix: ' mS/cm'),
       ),
       _MetricCardData(
         label: 'Water Temperature',
@@ -195,6 +219,24 @@ class _SensorGrid extends StatelessWidget {
         icon: Icons.water_drop_outlined,
         value: _formatValue(sensorData.waterLevel, suffix: '%'),
       ),
+      if (sensorData.humidity != null)
+        _MetricCardData(
+          label: 'Humidity',
+          icon: Icons.water_outlined,
+          value: _formatValue(sensorData.humidity, suffix: '%'),
+        ),
+      if (sensorData.tds != null)
+        _MetricCardData(
+          label: 'TDS',
+          icon: Icons.grain_outlined,
+          value: _formatValue(sensorData.tds, suffix: ' ppm'),
+        ),
+      if (sensorData.distance != null)
+        _MetricCardData(
+          label: 'Distance',
+          icon: Icons.straighten,
+          value: _formatValue(sensorData.distance, suffix: ' mm'),
+        ),
     ];
 
     return LayoutBuilder(
@@ -240,6 +282,127 @@ class _SensorGrid extends StatelessWidget {
     final displayValue =
         value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(1);
     return '$displayValue$suffix';
+  }
+}
+
+class _EcHistoryCard extends StatelessWidget {
+  const _EcHistoryCard({
+    required this.values,
+    required this.periodMs,
+    required this.windowMs,
+  });
+
+  final List<double> values;
+  final int periodMs;
+  final int windowMs;
+
+  @override
+  Widget build(BuildContext context) {
+    final latest = values.isEmpty ? null : values.last;
+    final windowMinutes = windowMs <= 0 ? 0 : (windowMs / 60000).round();
+
+    return AnimatedContainer(
+      duration: DashboardView._motionDuration,
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [kCardShadow],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'EC History',
+            style: HomeFiTextTheme.kSub2HeadTextStyle.copyWith(
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            latest == null
+                ? 'Waiting for EC samples.'
+                : '${latest.toStringAsFixed(0)} uS/cm across ${values.length} samples',
+            style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (windowMinutes > 0 && periodMs > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Last $windowMinutes min, every ${periodMs ~/ 1000}s',
+              style: HomeFiTextTheme.kBodyTextStyle.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 72,
+            child: CustomPaint(
+              painter: _EcSparklinePainter(
+                values: values,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EcSparklinePainter extends CustomPainter {
+  const _EcSparklinePainter({
+    required this.values,
+    required this.color,
+  });
+
+  final List<double> values;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..color = color.withValues(alpha: 0.12)
+      ..strokeWidth = 1;
+    for (var i = 0; i <= 3; i++) {
+      final y = size.height * i / 3;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    if (values.length < 2) {
+      return;
+    }
+
+    final maxValue = values.fold<double>(values.first, math.max);
+    final minValue = values.fold<double>(values.first, math.min);
+    final range = (maxValue - minValue).abs() < 1 ? 1.0 : maxValue - minValue;
+    final path = Path();
+    for (var i = 0; i < values.length; i++) {
+      final x = size.width * i / (values.length - 1);
+      final y = size.height - ((values[i] - minValue) / range * size.height);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    final linePaint = Paint()
+      ..color = color
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(path, linePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _EcSparklinePainter oldDelegate) {
+    return oldDelegate.values != values || oldDelegate.color != color;
   }
 }
 
@@ -376,6 +539,23 @@ class _StatusCard extends StatelessWidget {
             label: 'Grow Light Status',
             value: deviceState.lightOn,
           ),
+          if (deviceState.liquidAWet != null ||
+              deviceState.liquidBWet != null) ...[
+            const Divider(height: 24),
+            _StateRow(
+              label: 'Liquid A',
+              value: deviceState.liquidAWet,
+              trueLabel: 'WET',
+              falseLabel: 'DRY',
+            ),
+            const Divider(height: 24),
+            _StateRow(
+              label: 'Liquid B',
+              value: deviceState.liquidBWet,
+              trueLabel: 'WET',
+              falseLabel: 'DRY',
+            ),
+          ],
         ],
       ),
     );
@@ -386,15 +566,19 @@ class _StateRow extends StatelessWidget {
   const _StateRow({
     required this.label,
     required this.value,
+    this.trueLabel = 'ON',
+    this.falseLabel = 'OFF',
   });
 
   final String label;
   final bool? value;
+  final String trueLabel;
+  final String falseLabel;
 
   @override
   Widget build(BuildContext context) {
     final isOn = value == true;
-    final text = value == null ? 'Unknown' : (isOn ? 'ON' : 'OFF');
+    final text = value == null ? 'Unknown' : (isOn ? trueLabel : falseLabel);
 
     return Row(
       children: [

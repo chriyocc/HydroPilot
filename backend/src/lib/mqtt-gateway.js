@@ -7,6 +7,8 @@ function createTopicMap(config) {
     alarm: `${baseTopic}/alarm`,
     statePump: `${baseTopic}/state/pump`,
     stateLight: `${baseTopic}/state/light`,
+    stateNutrientA: `${baseTopic}/state/nutrient/a`,
+    stateNutrientB: `${baseTopic}/state/nutrient/b`,
     telemetryPh: `${baseTopic}/telemetry/ph`,
     telemetryEc: `${baseTopic}/telemetry/ec`,
     telemetryTemp: `${baseTopic}/telemetry/temp`,
@@ -104,6 +106,8 @@ function createMqttGateway({ config, mqttClient, deviceService, logger }) {
     topics.alarm,
     topics.statePump,
     topics.stateLight,
+    topics.stateNutrientA,
+    topics.stateNutrientB,
     topics.telemetryPh,
     topics.telemetryEc,
     topics.telemetryTemp,
@@ -178,6 +182,36 @@ function createMqttGateway({ config, mqttClient, deviceService, logger }) {
         deviceService.handleState({
           field: 'lightOn',
           value: readBoolean(payload, ['on', 'value', 'lightOn', 'light']),
+          requestId:
+            typeof payload === 'object' && payload !== null
+              ? payload.requestId ?? null
+              : null,
+          ts,
+        });
+        return;
+      case topics.stateNutrientA:
+        logger?.info('Nutrient result received', {
+          deviceId: config.hydroDeviceId,
+          channel: 'a',
+        });
+        deviceService.handleState({
+          field: 'nutrientA',
+          value: readBoolean(payload, ['ok', 'value']),
+          requestId:
+            typeof payload === 'object' && payload !== null
+              ? payload.requestId ?? null
+              : null,
+          ts,
+        });
+        return;
+      case topics.stateNutrientB:
+        logger?.info('Nutrient result received', {
+          deviceId: config.hydroDeviceId,
+          channel: 'b',
+        });
+        deviceService.handleState({
+          field: 'nutrientB',
+          value: readBoolean(payload, ['ok', 'value']),
           requestId:
             typeof payload === 'object' && payload !== null
               ? payload.requestId ?? null

@@ -88,6 +88,8 @@ test('mqtt gateway subscribes on connect and re-subscribes after reconnect', asy
     'hydro/device/device-1/alarm',
     'hydro/device/device-1/state/pump',
     'hydro/device/device-1/state/light',
+    'hydro/device/device-1/state/nutrient/a',
+    'hydro/device/device-1/state/nutrient/b',
     'hydro/device/device-1/telemetry/ph',
     'hydro/device/device-1/telemetry/ec',
     'hydro/device/device-1/telemetry/temp',
@@ -96,11 +98,71 @@ test('mqtt gateway subscribes on connect and re-subscribes after reconnect', asy
     'hydro/device/device-1/alarm',
     'hydro/device/device-1/state/pump',
     'hydro/device/device-1/state/light',
+    'hydro/device/device-1/state/nutrient/a',
+    'hydro/device/device-1/state/nutrient/b',
     'hydro/device/device-1/telemetry/ph',
     'hydro/device/device-1/telemetry/ec',
     'hydro/device/device-1/telemetry/temp',
     'hydro/device/device-1/telemetry/waterlevel',
   ]);
+});
+
+test('mqtt gateway resolves correlated nutrient result commands', async () => {
+  const now = () => 1_710_000_000_000;
+  const config = createConfig();
+  const snapshotStore = createSnapshotStore({ config, now });
+  const eventStream = createEventStream();
+  const commandService = createCommandService({
+    config,
+    publisher: { publish: async () => {} },
+    eventStream,
+    now,
+    scheduleTimeout: () => ({ trigger() {}, clear() {} }),
+  });
+  const deviceService = createDeviceService({
+    config,
+    snapshotStore,
+    eventStream,
+    commandService,
+  });
+  const mqttClient = createFakeMqttClient();
+  const gateway = createMqttGateway({
+    config,
+    mqttClient,
+    deviceService,
+  });
+  const events = [];
+
+  eventStream.subscribe({
+    writeEvent(eventName, payload) {
+      events.push({ eventName, payload });
+    },
+    close() {},
+  });
+
+  gateway.start();
+  await mqttClient.emit('connect');
+
+  const accepted = await commandService.publishCommand({
+    topic: 'hydro/device/device-1/cmd/nutrient/a',
+    payload: { action: 'dose' },
+  });
+
+  await mqttClient.emit(
+    'message',
+    'hydro/device/device-1/state/nutrient/a',
+    Buffer.from(
+      JSON.stringify({
+        requestId: accepted.requestId,
+        ok: true,
+        ts: new Date(now()).toISOString(),
+      }),
+    ),
+  );
+
+  assert.equal(events.at(-1).eventName, 'command-result');
+  assert.equal(events.at(-1).payload.status, 'succeeded');
+  assert.equal(events.at(-1).payload.requestId, accepted.requestId);
 });
 
 test('mqtt gateway updates snapshot from incoming messages and resolves correlated commands', async () => {

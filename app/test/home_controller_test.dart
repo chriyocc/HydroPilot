@@ -26,6 +26,8 @@ void main() {
   test('controller stays disconnected when backend URL is empty', () async {
     final settingsService = await createSettingsService(
       const AppSettings(
+        transportMode: TransportMode.realServer,
+        localDeviceBaseUrl: AppSettings.defaultLocalDeviceBaseUrl,
         backendBaseUrl: '',
         refreshInterval: 0,
       ),
@@ -48,6 +50,8 @@ void main() {
     final apiService = FakeHydroApiService();
     final settingsService = await createSettingsService(
       const AppSettings(
+        transportMode: TransportMode.realServer,
+        localDeviceBaseUrl: AppSettings.defaultLocalDeviceBaseUrl,
         backendBaseUrl: 'http://localhost:3000',
         refreshInterval: 0,
       ),
@@ -84,6 +88,8 @@ void main() {
     final apiService = FakeHydroApiService();
     final settingsService = await createSettingsService(
       const AppSettings(
+        transportMode: TransportMode.realServer,
+        localDeviceBaseUrl: AppSettings.defaultLocalDeviceBaseUrl,
         backendBaseUrl: 'http://localhost:3000',
         refreshInterval: 0,
       ),
@@ -154,6 +160,8 @@ void main() {
     final apiService = FakeHydroApiService();
     final settingsService = await createSettingsService(
       const AppSettings(
+        transportMode: TransportMode.realServer,
+        localDeviceBaseUrl: AppSettings.defaultLocalDeviceBaseUrl,
         backendBaseUrl: 'http://localhost:3000',
         refreshInterval: 0,
       ),
@@ -183,6 +191,8 @@ void main() {
     final provisioningService = FakeDeviceProvisioningService();
     final settingsService = await createSettingsService(
       const AppSettings(
+        transportMode: TransportMode.realServer,
+        localDeviceBaseUrl: AppSettings.defaultLocalDeviceBaseUrl,
         backendBaseUrl: 'http://localhost:3000',
         refreshInterval: 0,
       ),
@@ -224,6 +234,8 @@ void main() {
     );
     final settingsService = await createSettingsService(
       const AppSettings(
+        transportMode: TransportMode.realServer,
+        localDeviceBaseUrl: AppSettings.defaultLocalDeviceBaseUrl,
         backendBaseUrl: 'http://localhost:3000',
         refreshInterval: 0,
       ),
@@ -253,6 +265,112 @@ void main() {
       'Automatic setup is unavailable on this Android version. Join the controller Wi-Fi manually.',
     );
   });
+
+  test('local network mode fetches local status without opening SSE', () async {
+    final apiService = FakeHydroApiService();
+    final settingsService = await createSettingsService(
+      const AppSettings(
+        transportMode: TransportMode.localNetwork,
+        localDeviceBaseUrl: 'http://192.168.1.50',
+        backendBaseUrl: '',
+        refreshInterval: 0,
+      ),
+    );
+    final controller = HomeController(
+      settingsService: settingsService,
+      apiService: apiService,
+      enableAutoRefresh: false,
+    );
+
+    controller.onInit();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(apiService.lastLocalStatusBaseUrl, 'http://192.168.1.50');
+    expect(apiService.openEventStreamCallCount, 0);
+    expect(controller.runtimeStatus.isDeviceOnline, true);
+    expect(controller.statusMessage, isNull);
+  });
+
+  test('local network pump command posts locally and refreshes status',
+      () async {
+    final apiService = FakeHydroApiService();
+    final settingsService = await createSettingsService(
+      const AppSettings(
+        transportMode: TransportMode.localNetwork,
+        localDeviceBaseUrl: 'http://192.168.1.50',
+        backendBaseUrl: '',
+        refreshInterval: 0,
+      ),
+    );
+    final controller = HomeController(
+      settingsService: settingsService,
+      apiService: apiService,
+      enableAutoRefresh: false,
+    );
+
+    controller.onInit();
+    await Future<void>.delayed(Duration.zero);
+    await controller.togglePump(true);
+
+    expect(apiService.lastLocalPumpBaseUrl, 'http://192.168.1.50');
+    expect(apiService.lastLocalPumpValue, true);
+    expect(apiService.localStatusCallCount, 2);
+    expect(controller.isCommandPending(CommandType.pump), false);
+    expect(controller.lastActionMessage, 'Pump updated.');
+  });
+
+  test('local network nutrient command posts once without backend pending state',
+      () async {
+    final apiService = FakeHydroApiService();
+    final settingsService = await createSettingsService(
+      const AppSettings(
+        transportMode: TransportMode.localNetwork,
+        localDeviceBaseUrl: 'http://192.168.1.50',
+        backendBaseUrl: '',
+        refreshInterval: 0,
+      ),
+    );
+    final controller = HomeController(
+      settingsService: settingsService,
+      apiService: apiService,
+      enableAutoRefresh: false,
+    );
+
+    controller.onInit();
+    await Future<void>.delayed(Duration.zero);
+    await controller.doseNutrientA();
+
+    expect(apiService.localNutrientACallCount, 1);
+    expect(apiService.openEventStreamCallCount, 0);
+    expect(controller.isCommandPending(CommandType.nutrientA), false);
+    expect(controller.lastActionMessage, 'Nutrient A updated.');
+  });
+
+  test('local network target dose sends selected EC concentration', () async {
+    final apiService = FakeHydroApiService();
+    final settingsService = await createSettingsService(
+      const AppSettings(
+        transportMode: TransportMode.localNetwork,
+        localDeviceBaseUrl: 'http://192.168.1.50',
+        backendBaseUrl: '',
+        refreshInterval: 0,
+      ),
+    );
+    final controller = HomeController(
+      settingsService: settingsService,
+      apiService: apiService,
+      enableAutoRefresh: false,
+    );
+
+    controller.onInit();
+    await Future<void>.delayed(Duration.zero);
+    controller.setTargetEcAb('1.7');
+    await controller.toggleTargetDoseAb();
+
+    expect(apiService.lastToggledDevice, 'target_dose_ab');
+    expect(apiService.lastToggleConcentration, 1.7);
+    expect(controller.isCommandPending(CommandType.targetDoseAb), false);
+  });
 }
 
 Future<SettingsService> createSettingsService(AppSettings settings) async {
@@ -268,6 +386,14 @@ class FakeHydroApiService extends HydroApiService {
   final StreamController<HydroSseEvent> _streamController;
   String? lastConfiguredSsid;
   String? lastConfiguredPassword;
+  String? lastLocalStatusBaseUrl;
+  String? lastLocalPumpBaseUrl;
+  bool? lastLocalPumpValue;
+  String? lastToggledDevice;
+  double? lastToggleConcentration;
+  int localStatusCallCount = 0;
+  int localNutrientACallCount = 0;
+  int openEventStreamCallCount = 0;
 
   @override
   Future<HydroStatusSnapshot> fetchStatus(String backendBaseUrl) async {
@@ -282,13 +408,73 @@ class FakeHydroApiService extends HydroApiService {
   }
 
   @override
+  Future<HydroStatusSnapshot> fetchLocalStatus(String baseUrl) async {
+    lastLocalStatusBaseUrl = baseUrl;
+    localStatusCallCount += 1;
+    return const HydroStatusSnapshot(
+      sensorData: SensorData(
+        ec: 1413,
+        waterTemperature: 24.5,
+        waterLevel: 82,
+        humidity: 60,
+        tds: 420,
+        distance: 110,
+      ),
+      deviceState: DeviceState(
+        lightOn: false,
+        primeAOn: false,
+        targetDoseAbOn: false,
+        targetEcA: 1.1,
+        targetEcB: 1.2,
+        targetEcAb: 1.3,
+      ),
+      runtimeStatus: RuntimeStatus(
+        isBackendReachable: true,
+        isDeviceOnline: true,
+        isStreamConnected: false,
+      ),
+    );
+  }
+
+  @override
   Stream<HydroSseEvent> openEventStream(String backendBaseUrl) {
+    openEventStreamCallCount += 1;
     return _streamController.stream;
   }
 
   @override
   Future<HydroCommandAccepted> setPump(String backendBaseUrl, bool on) async {
     return const HydroCommandAccepted(requestId: 'pump-1', status: 'accepted');
+  }
+
+  @override
+  Future<void> setLocalPump(String baseUrl, bool on) async {
+    lastLocalPumpBaseUrl = baseUrl;
+    lastLocalPumpValue = on;
+  }
+
+  @override
+  Future<void> doseLocalNutrientA(String baseUrl) async {
+    localNutrientACallCount += 1;
+  }
+
+  @override
+  Future<void> toggleLocalDevice(
+    String baseUrl,
+    String device, {
+    double? concentration,
+  }) async {
+    lastToggledDevice = device;
+    lastToggleConcentration = concentration;
+  }
+
+  @override
+  Future<HydroEcHistory> fetchLocalEcHistory(String baseUrl) async {
+    return const HydroEcHistory(
+      periodMs: 2000,
+      windowMs: 180000,
+      ecValues: [1200, 1300],
+    );
   }
 
   @override

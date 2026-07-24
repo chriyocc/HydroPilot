@@ -19,6 +19,13 @@ enum CommandType {
   light,
   nutrientA,
   nutrientB,
+  primeA,
+  primeB,
+  targetDoseA,
+  targetDoseB,
+  targetDoseAb,
+  shotDoseA,
+  shotDoseB,
 }
 
 class HomeController extends GetxController {
@@ -45,19 +52,32 @@ class HomeController extends GetxController {
 
   StreamSubscription<HydroSseEvent>? _eventSubscription;
   Timer? _reconnectTimer;
+  Timer? _localRefreshTimer;
   int _reconnectAttempt = 0;
 
   int get currentIndex => _currentIndex.value;
   bool get hasBackendConfigured => settings.backendBaseUrl.trim().isNotEmpty;
+  bool get hasLocalDeviceConfigured =>
+      settings.localDeviceBaseUrl.trim().isNotEmpty;
+  bool get hasActiveTransportConfigured =>
+      settings.usesLocalNetwork ? hasLocalDeviceConfigured : hasBackendConfigured;
 
   AppSettings settings = AppSettings.defaults();
   SensorData sensorData = const SensorData();
   DeviceState deviceState = const DeviceState();
   RuntimeStatus runtimeStatus = const RuntimeStatus();
+  HydroEcHistory ecHistory = const HydroEcHistory(
+    periodMs: 0,
+    windowMs: 0,
+    ecValues: [],
+  );
   bool isLoadingStatus = true;
   bool isAutoProvisioningSupported = false;
   String? statusMessage;
   String? lastActionMessage;
+  double targetEcA = 1.0;
+  double targetEcB = 1.0;
+  double targetEcAb = 1.0;
 
   final List<Widget> homeViews = const [
     DashboardView(),
@@ -85,7 +105,7 @@ class HomeController extends GetxController {
   }
 
   Future<void> refreshStatus({bool showLoading = false}) async {
-    if (!hasBackendConfigured) {
+    if (!hasActiveTransportConfigured) {
       _resetRuntimeState();
       update(['dashboard', 'control', 'settings']);
       return;
@@ -97,12 +117,18 @@ class HomeController extends GetxController {
     }
 
     try {
-      final snapshot = await _apiService.fetchStatus(settings.backendBaseUrl);
+      final snapshot = settings.usesLocalNetwork
+          ? await _apiService.fetchLocalStatus(settings.localDeviceBaseUrl)
+          : await _apiService.fetchStatus(settings.backendBaseUrl);
       _applySnapshot(snapshot);
+      if (settings.usesLocalNetwork) {
+        await _refreshLocalEcHistory();
+      }
     } catch (_) {
       runtimeStatus = runtimeStatus.copyWith(
         isBackendReachable: false,
         isStreamConnected: false,
+        isDeviceOnline: settings.usesLocalNetwork ? false : null,
       );
       _recomputeStatusMessage();
     } finally {
@@ -121,6 +147,17 @@ class HomeController extends GetxController {
   }
 
   Future<void> togglePump(bool value) async {
+    if (settings.usesLocalNetwork) {
+      await _runLocalCommand(
+        type: CommandType.pump,
+        action: () => _apiService.setLocalPump(
+          settings.localDeviceBaseUrl,
+          value,
+        ),
+      );
+      return;
+    }
+
     await _runCommand(
       type: CommandType.pump,
       action: () => _apiService.setPump(settings.backendBaseUrl, value),
@@ -129,6 +166,17 @@ class HomeController extends GetxController {
   }
 
   Future<void> toggleGrowLight(bool value) async {
+    if (settings.usesLocalNetwork) {
+      await _runLocalCommand(
+        type: CommandType.light,
+        action: () => _apiService.setLocalGrowLight(
+          settings.localDeviceBaseUrl,
+          value,
+        ),
+      );
+      return;
+    }
+
     await _runCommand(
       type: CommandType.light,
       action: () => _apiService.setGrowLight(settings.backendBaseUrl, value),
@@ -138,6 +186,16 @@ class HomeController extends GetxController {
   }
 
   Future<void> doseNutrientA() async {
+    if (settings.usesLocalNetwork) {
+      await _runLocalCommand(
+        type: CommandType.nutrientA,
+        action: () => _apiService.doseLocalNutrientA(
+          settings.localDeviceBaseUrl,
+        ),
+      );
+      return;
+    }
+
     await _runCommand(
       type: CommandType.nutrientA,
       action: () => _apiService.doseNutrientA(settings.backendBaseUrl),
@@ -147,6 +205,16 @@ class HomeController extends GetxController {
   }
 
   Future<void> doseNutrientB() async {
+    if (settings.usesLocalNetwork) {
+      await _runLocalCommand(
+        type: CommandType.nutrientB,
+        action: () => _apiService.doseLocalNutrientB(
+          settings.localDeviceBaseUrl,
+        ),
+      );
+      return;
+    }
+
     await _runCommand(
       type: CommandType.nutrientB,
       action: () => _apiService.doseNutrientB(settings.backendBaseUrl),
@@ -225,27 +293,36 @@ class HomeController extends GetxController {
   }
 
   Future<void> _loadRuntime() async {
-    if (!hasBackendConfigured) {
+    if (!hasActiveTransportConfigured) {
       _resetRuntimeState();
       update(['dashboard', 'control']);
       return;
     }
 
     await refreshStatus(showLoading: true);
-    _connectEventStream();
+    if (settings.usesLocalNetwork) {
+      _startLocalRefreshTimer();
+    } else {
+      _connectEventStream();
+    }
   }
 
   void _resetRuntimeState() {
     sensorData = const SensorData();
     deviceState = const DeviceState();
     runtimeStatus = const RuntimeStatus();
+    ecHistory = const HydroEcHistory(periodMs: 0, windowMs: 0, ecValues: []);
     isLoadingStatus = false;
-    statusMessage = 'Set a backend URL in Settings.';
+    statusMessage = settings.usesLocalNetwork
+        ? 'Set a local ESP32 URL in Settings.'
+        : 'Set a backend URL in Settings.';
   }
 
   Future<void> _clearConnectionState() async {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _localRefreshTimer?.cancel();
+    _localRefreshTimer = null;
     _reconnectAttempt = 0;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
@@ -253,7 +330,7 @@ class HomeController extends GetxController {
   }
 
   void _connectEventStream() {
-    if (!hasBackendConfigured) {
+    if (!hasBackendConfigured || settings.usesLocalNetwork) {
       return;
     }
 
@@ -320,7 +397,7 @@ class HomeController extends GetxController {
   }
 
   void _handleSseDisconnect([Object? _]) {
-    if (!hasBackendConfigured) {
+    if (!hasBackendConfigured || settings.usesLocalNetwork) {
       return;
     }
 
@@ -331,7 +408,9 @@ class HomeController extends GetxController {
   }
 
   void _scheduleReconnect() {
-    if (_reconnectTimer != null || !hasBackendConfigured) {
+    if (_reconnectTimer != null ||
+        !hasBackendConfigured ||
+        settings.usesLocalNetwork) {
       return;
     }
 
@@ -343,13 +422,98 @@ class HomeController extends GetxController {
     });
   }
 
+  void _startLocalRefreshTimer() {
+    if (!enableAutoRefresh || !settings.usesLocalNetwork) {
+      return;
+    }
+
+    _localRefreshTimer?.cancel();
+    final intervalSeconds =
+        settings.refreshInterval > 0 ? settings.refreshInterval : 2;
+    _localRefreshTimer = Timer.periodic(
+      Duration(seconds: intervalSeconds),
+      (_) => refreshStatus(),
+    );
+  }
+
+  void setTargetEcA(String value) {
+    targetEcA = _parseTargetEc(value, targetEcA);
+  }
+
+  void setTargetEcB(String value) {
+    targetEcB = _parseTargetEc(value, targetEcB);
+  }
+
+  void setTargetEcAb(String value) {
+    targetEcAb = _parseTargetEc(value, targetEcAb);
+  }
+
+  Future<void> togglePrimeA() {
+    return _runLocalToggle(type: CommandType.primeA, device: 'prime_a');
+  }
+
+  Future<void> togglePrimeB() {
+    return _runLocalToggle(type: CommandType.primeB, device: 'prime_b');
+  }
+
+  Future<void> startShotDoseA() {
+    return _runLocalToggle(type: CommandType.shotDoseA, device: 'shot_dose_a');
+  }
+
+  Future<void> startShotDoseB() {
+    return _runLocalToggle(type: CommandType.shotDoseB, device: 'shot_dose_b');
+  }
+
+  Future<void> toggleTargetDoseA() {
+    return _runLocalToggle(
+      type: CommandType.targetDoseA,
+      device: 'target_dose_a',
+      concentration: targetEcA,
+    );
+  }
+
+  Future<void> toggleTargetDoseB() {
+    return _runLocalToggle(
+      type: CommandType.targetDoseB,
+      device: 'target_dose_b',
+      concentration: targetEcB,
+    );
+  }
+
+  Future<void> toggleTargetDoseAb() {
+    return _runLocalToggle(
+      type: CommandType.targetDoseAb,
+      device: 'target_dose_ab',
+      concentration: targetEcAb,
+    );
+  }
+
   void _applySnapshot(HydroStatusSnapshot snapshot) {
     sensorData = snapshot.sensorData;
     deviceState = snapshot.deviceState;
+    if (settings.usesLocalNetwork) {
+      targetEcA = snapshot.deviceState.targetEcA ?? targetEcA;
+      targetEcB = snapshot.deviceState.targetEcB ?? targetEcB;
+      targetEcAb = snapshot.deviceState.targetEcAb ?? targetEcAb;
+    }
     runtimeStatus = snapshot.runtimeStatus.copyWith(
       isStreamConnected: runtimeStatus.isStreamConnected,
     );
     _recomputeStatusMessage();
+  }
+
+  Future<void> _refreshLocalEcHistory() async {
+    if (!settings.usesLocalNetwork || !hasLocalDeviceConfigured) {
+      return;
+    }
+
+    try {
+      ecHistory = await _apiService.fetchLocalEcHistory(
+        settings.localDeviceBaseUrl,
+      );
+    } catch (_) {
+      // EC history is secondary to control/status, so keep the last chart data.
+    }
   }
 
   void _applyTelemetryDelta(Map<String, dynamic> payload) {
@@ -440,6 +604,53 @@ class HomeController extends GetxController {
     }
   }
 
+  Future<void> _runLocalCommand({
+    required CommandType type,
+    required Future<void> Function() action,
+  }) async {
+    if (!hasLocalDeviceConfigured) {
+      statusMessage = 'Set a local ESP32 URL in Settings.';
+      update(['dashboard', 'control']);
+      return;
+    }
+
+    lastActionMessage = null;
+    _pendingCommandRequestIds[type] = 'local';
+    update(['control']);
+
+    try {
+      await action();
+      lastActionMessage = '${_commandLabel(type)} updated.';
+      await refreshStatus();
+    } catch (_) {
+      lastActionMessage = 'Unable to reach local ESP32.';
+      runtimeStatus = runtimeStatus.copyWith(
+        isBackendReachable: false,
+        isDeviceOnline: false,
+        isStreamConnected: false,
+      );
+      _recomputeStatusMessage();
+    } finally {
+      _pendingCommandRequestIds.remove(type);
+      update(['dashboard', 'control']);
+    }
+  }
+
+  Future<void> _runLocalToggle({
+    required CommandType type,
+    required String device,
+    double? concentration,
+  }) {
+    return _runLocalCommand(
+      type: type,
+      action: () => _apiService.toggleLocalDevice(
+        settings.localDeviceBaseUrl,
+        device,
+        concentration: concentration,
+      ),
+    );
+  }
+
   CommandType? _matchPendingCommand(String requestId) {
     for (final entry in _pendingCommandRequestIds.entries) {
       if (entry.value == requestId) {
@@ -455,12 +666,46 @@ class HomeController extends GetxController {
       CommandType.light => 'Grow light',
       CommandType.nutrientA => 'Nutrient A',
       CommandType.nutrientB => 'Nutrient B',
+      CommandType.primeA => 'Prime line A',
+      CommandType.primeB => 'Prime line B',
+      CommandType.targetDoseA => 'Target dose A',
+      CommandType.targetDoseB => 'Target dose B',
+      CommandType.targetDoseAb => 'Target dose A+B',
+      CommandType.shotDoseA => 'Shot dose A',
+      CommandType.shotDoseB => 'Shot dose B',
     };
   }
 
+  double _parseTargetEc(String value, double fallback) {
+    final parsed = double.tryParse(value);
+    if (parsed == null) {
+      return fallback;
+    }
+    return parsed.clamp(0.0, 5.0).toDouble();
+  }
+
   void _recomputeStatusMessage() {
-    if (!hasBackendConfigured) {
-      statusMessage = 'Set a backend URL in Settings.';
+    if (!hasActiveTransportConfigured) {
+      statusMessage = settings.usesLocalNetwork
+          ? 'Set a local ESP32 URL in Settings.'
+          : 'Set a backend URL in Settings.';
+      return;
+    }
+
+    if (settings.usesLocalNetwork) {
+      if (!runtimeStatus.isBackendReachable ||
+          runtimeStatus.isDeviceOnline == false) {
+        statusMessage =
+            'Unable to reach local ESP32 at ${settings.localDeviceBaseUrl}.';
+        return;
+      }
+
+      if (runtimeStatus.isDeviceOnline == null) {
+        statusMessage = 'Waiting for local ESP32 status.';
+        return;
+      }
+
+      statusMessage = null;
       return;
     }
 
