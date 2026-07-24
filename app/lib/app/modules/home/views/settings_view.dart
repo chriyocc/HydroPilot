@@ -15,18 +15,23 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late final HomeController controller;
   late final TextEditingController backendBaseUrlController;
+  late final TextEditingController localDeviceBaseUrlController;
+  late TransportMode selectedTransportMode;
 
   @override
   void initState() {
     super.initState();
     controller = Get.find<HomeController>();
     backendBaseUrlController = TextEditingController();
+    localDeviceBaseUrlController = TextEditingController();
+    selectedTransportMode = controller.settings.transportMode;
     _syncFromSettings(controller.settings);
   }
 
   @override
   void dispose() {
     backendBaseUrlController.dispose();
+    localDeviceBaseUrlController.dispose();
     super.dispose();
   }
 
@@ -35,8 +40,6 @@ class _SettingsViewState extends State<SettingsView> {
     return GetBuilder<HomeController>(
       id: 'settings',
       builder: (_) {
-        _syncFromSettings(controller.settings);
-
         return ListView(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
           children: [
@@ -48,7 +51,7 @@ class _SettingsViewState extends State<SettingsView> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Configure the backend URL for runtime status, commands, and live updates.',
+              'Choose local ESP32 testing or the real backend runtime path.',
               style: HomeFiTextTheme.kBodyTextStyle.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -57,13 +60,41 @@ class _SettingsViewState extends State<SettingsView> {
             _SettingsCard(
               child: Column(
                 children: [
-                  TextField(
-                    controller: backendBaseUrlController,
-                    decoration: const InputDecoration(
-                      labelText: 'Backend Base URL',
-                      hintText: 'http://192.168.1.44:3000',
-                    ),
+                  SegmentedButton<TransportMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: TransportMode.localNetwork,
+                        label: Text('Local Network'),
+                      ),
+                      ButtonSegment(
+                        value: TransportMode.realServer,
+                        label: Text('Real Server'),
+                      ),
+                    ],
+                    selected: {selectedTransportMode},
+                    onSelectionChanged: (selection) {
+                      setState(() {
+                        selectedTransportMode = selection.single;
+                      });
+                    },
                   ),
+                  const SizedBox(height: 18),
+                  if (selectedTransportMode == TransportMode.localNetwork)
+                    TextField(
+                      controller: localDeviceBaseUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'Local ESP32 URL',
+                        hintText: 'http://192.168.1.50',
+                      ),
+                    )
+                  else
+                    TextField(
+                      controller: backendBaseUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'Backend Base URL',
+                        hintText: 'http://192.168.1.44:3000',
+                      ),
+                    ),
                   const SizedBox(height: 18),
                   SizedBox(
                     width: double.infinity,
@@ -131,6 +162,8 @@ class _SettingsViewState extends State<SettingsView> {
 
   void _saveSettings() {
     final settings = controller.settings.copyWith(
+      transportMode: selectedTransportMode,
+      localDeviceBaseUrl: localDeviceBaseUrlController.text.trim(),
       backendBaseUrl: backendBaseUrlController.text.trim(),
     );
 
@@ -140,7 +173,9 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   void _syncFromSettings(AppSettings settings) {
+    selectedTransportMode = settings.transportMode;
     backendBaseUrlController.text = settings.backendBaseUrl;
+    localDeviceBaseUrlController.text = settings.localDeviceBaseUrl;
   }
 }
 

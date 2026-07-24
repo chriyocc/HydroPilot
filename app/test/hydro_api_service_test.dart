@@ -88,6 +88,106 @@ void main() {
     expect(events.last.payload['status'], 'timeout');
   });
 
+  test('fetchLocalStatus parses ESP32 status payload', () async {
+    final client = QueueHttpClient([
+      http.Response(
+        jsonEncode({
+          'light': false,
+          'prime_a': true,
+          'prime_b': false,
+          'target_dose_a': false,
+          'target_dose_b': false,
+          'target_dose_ab': true,
+          'shot_dose_a': false,
+          'shot_dose_b': true,
+          'target_ec_a': 1.2,
+          'target_ec_b': 1.3,
+          'target_ec_ab': 1.4,
+          'temp': 24.8,
+          'humidity': 62.5,
+          'water': 79,
+          'tds': 400,
+          'ec': 1413,
+          'distance': 120,
+          'liquid1': true,
+          'liquid2': false,
+        }),
+        200,
+      ),
+    ]);
+    final service = HydroApiService(client: client);
+
+    final snapshot = await service.fetchLocalStatus('http://192.168.1.50');
+
+    expect(
+      client.requests.single.url.toString(),
+      'http://192.168.1.50/api/status',
+    );
+    expect(snapshot.sensorData.ec, 1413);
+    expect(snapshot.sensorData.waterTemperature, 24.8);
+    expect(snapshot.sensorData.humidity, 62.5);
+    expect(snapshot.sensorData.waterLevel, 79);
+    expect(snapshot.sensorData.tds, 400);
+    expect(snapshot.sensorData.distance, 120);
+    expect(snapshot.deviceState.lightOn, false);
+    expect(snapshot.deviceState.primeAOn, true);
+    expect(snapshot.deviceState.targetDoseAbOn, true);
+    expect(snapshot.deviceState.shotDoseBOn, true);
+    expect(snapshot.deviceState.liquidAWet, true);
+    expect(snapshot.deviceState.targetEcAb, 1.4);
+    expect(snapshot.runtimeStatus.isDeviceOnline, true);
+    expect(snapshot.runtimeStatus.isStreamConnected, false);
+  });
+
+  test('local command helpers post to firmware webserver toggle endpoint',
+      () async {
+    final client = QueueHttpClient([
+      http.Response('{"ok":true}', 200),
+      http.Response('{"ok":true}', 200),
+    ]);
+    final service = HydroApiService(client: client);
+
+    await service.setLocalPump('http://192.168.1.50', true);
+    await service.toggleLocalDevice(
+      'http://192.168.1.50',
+      'target_dose_ab',
+      concentration: 1.4,
+    );
+
+    expect(
+      client.requests.map((request) => request.url.toString()),
+      [
+        'http://192.168.1.50/api/toggle?device=pump',
+        'http://192.168.1.50/api/toggle?device=target_dose_ab&concentration=1.4',
+      ],
+    );
+    expect(client.requests.first.method, 'POST');
+  });
+
+  test('fetchLocalEcHistory parses firmware EC history payload', () async {
+    final client = QueueHttpClient([
+      http.Response(
+        jsonEncode({
+          'period_ms': 2000,
+          'window_ms': 180000,
+          'ec': [1200, 1300, 1413],
+        }),
+        200,
+      ),
+    ]);
+    final service = HydroApiService(client: client);
+
+    final history = await service.fetchLocalEcHistory('http://192.168.1.50');
+
+    expect(
+      client.requests.single.url.toString(),
+      'http://192.168.1.50/api/ec_history',
+    );
+    expect(history.periodMs, 2000);
+    expect(history.windowMs, 180000);
+    expect(history.ecValues, [1200.0, 1300.0, 1413.0]);
+  });
+
   test('fetchStatus times out when backend does not respond', () async {
     final service = HydroApiService(
       client: HangingHttpClient(),
@@ -117,9 +217,11 @@ class QueueHttpClient extends http.BaseClient {
       : _streamedResponses = streamedResponses;
 
   final List<http.StreamedResponse> _streamedResponses;
+  final List<http.BaseRequest> requests = [];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    requests.add(request);
     if (_streamedResponses.isEmpty) {
       throw StateError('No queued response available for ${request.url}.');
     }

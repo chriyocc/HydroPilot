@@ -48,6 +48,55 @@ class HydroStatusSnapshot {
       ),
     );
   }
+
+  factory HydroStatusSnapshot.fromLocalStatusPayload(
+    Map<String, dynamic> payload,
+  ) {
+    return HydroStatusSnapshot(
+      sensorData: SensorData(
+        ph: HydroApiService._readDouble(payload, ['ph']),
+        ec: HydroApiService._readDouble(payload, ['ec']),
+        waterTemperature: HydroApiService._readDouble(
+          payload,
+          ['waterTemperature', 'water_temperature', 'temp', 'temperature'],
+        ),
+        waterLevel: HydroApiService._readDouble(
+          payload,
+          ['waterLevel', 'water_level', 'level'],
+        ),
+        humidity: HydroApiService._readDouble(payload, ['humidity']),
+        tds: HydroApiService._readDouble(payload, ['tds']),
+        distance: HydroApiService._readDouble(payload, ['distance']),
+      ),
+      deviceState: DeviceState(
+        pumpOn: HydroApiService._readBool(
+          payload,
+          ['pumpOn', 'pump_on', 'pump'],
+        ),
+        lightOn: HydroApiService._readBool(
+          payload,
+          ['lightOn', 'light_on', 'light'],
+        ),
+        primeAOn: HydroApiService._readBool(payload, ['prime_a']),
+        primeBOn: HydroApiService._readBool(payload, ['prime_b']),
+        targetDoseAOn: HydroApiService._readBool(payload, ['target_dose_a']),
+        targetDoseBOn: HydroApiService._readBool(payload, ['target_dose_b']),
+        targetDoseAbOn: HydroApiService._readBool(payload, ['target_dose_ab']),
+        shotDoseAOn: HydroApiService._readBool(payload, ['shot_dose_a']),
+        shotDoseBOn: HydroApiService._readBool(payload, ['shot_dose_b']),
+        liquidAWet: HydroApiService._readBool(payload, ['liquid1']),
+        liquidBWet: HydroApiService._readBool(payload, ['liquid2']),
+        targetEcA: HydroApiService._readDouble(payload, ['target_ec_a']),
+        targetEcB: HydroApiService._readDouble(payload, ['target_ec_b']),
+        targetEcAb: HydroApiService._readDouble(payload, ['target_ec_ab']),
+      ),
+      runtimeStatus: const RuntimeStatus(
+        isBackendReachable: true,
+        isDeviceOnline: true,
+        isStreamConnected: false,
+      ),
+    );
+  }
 }
 
 class HydroCommandAccepted {
@@ -68,6 +117,34 @@ class HydroSseEvent {
 
   final String name;
   final Map<String, dynamic> payload;
+}
+
+class HydroEcHistory {
+  const HydroEcHistory({
+    required this.periodMs,
+    required this.windowMs,
+    required this.ecValues,
+  });
+
+  final int periodMs;
+  final int windowMs;
+  final List<double> ecValues;
+
+  factory HydroEcHistory.fromPayload(Map<String, dynamic> payload) {
+    final values = payload['ec'];
+    return HydroEcHistory(
+      periodMs: HydroApiService._readInt(payload, ['period_ms']) ?? 0,
+      windowMs: HydroApiService._readInt(payload, ['window_ms']) ?? 0,
+      ecValues: values is List
+          ? values
+              .map((value) => value is num
+                  ? value.toDouble()
+                  : double.tryParse(value.toString()))
+              .whereType<double>()
+              .toList()
+          : const [],
+    );
+  }
 }
 
 class LocalMaintenanceHealth {
@@ -102,6 +179,26 @@ class HydroApiService {
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     return HydroStatusSnapshot.fromBackendPayload(payload);
+  }
+
+  Future<HydroStatusSnapshot> fetchLocalStatus(String baseUrl) async {
+    final response = await _client
+        .get(_buildLocalUri(baseUrl, '/api/status'))
+        .timeout(_requestTimeout);
+    _ensureSuccess(response);
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return HydroStatusSnapshot.fromLocalStatusPayload(payload);
+  }
+
+  Future<HydroEcHistory> fetchLocalEcHistory(String baseUrl) async {
+    final response = await _client
+        .get(_buildLocalUri(baseUrl, '/api/ec_history'))
+        .timeout(_requestTimeout);
+    _ensureSuccess(response);
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return HydroEcHistory.fromPayload(payload);
   }
 
   Stream<HydroSseEvent> openEventStream(String backendBaseUrl) async* {
@@ -178,6 +275,37 @@ class HydroApiService {
     );
   }
 
+  Future<void> setLocalPump(String baseUrl, bool on) {
+    return toggleLocalDevice(baseUrl, 'pump');
+  }
+
+  Future<void> setLocalGrowLight(String baseUrl, bool on) {
+    return toggleLocalDevice(baseUrl, 'light');
+  }
+
+  Future<void> doseLocalNutrientA(String baseUrl) {
+    return toggleLocalDevice(baseUrl, 'shot_dose_a');
+  }
+
+  Future<void> doseLocalNutrientB(String baseUrl) {
+    return toggleLocalDevice(baseUrl, 'shot_dose_b');
+  }
+
+  Future<void> toggleLocalDevice(
+    String baseUrl,
+    String device, {
+    double? concentration,
+  }) async {
+    final query = <String, String>{'device': device};
+    if (concentration != null) {
+      query['concentration'] = concentration.toStringAsFixed(1);
+    }
+    final response = await _client
+        .post(_buildLocalUri(baseUrl, '/api/toggle', query))
+        .timeout(_requestTimeout);
+    _ensureSuccess(response);
+  }
+
   Future<LocalMaintenanceHealth> fetchLocalHealth(String baseUrl) async {
     final response = await _client
         .get(_buildLocalUri(baseUrl, '/health'))
@@ -251,11 +379,19 @@ class HydroApiService {
     return Uri.parse('$normalizedBaseUrl$path');
   }
 
-  Uri _buildLocalUri(String baseUrl, String path) {
+  Uri _buildLocalUri(
+    String baseUrl,
+    String path, [
+    Map<String, String>? queryParameters,
+  ]) {
     final normalizedBaseUrl = baseUrl.endsWith('/')
         ? baseUrl.substring(0, baseUrl.length - 1)
         : baseUrl;
-    return Uri.parse('$normalizedBaseUrl$path');
+    final uri = Uri.parse('$normalizedBaseUrl$path');
+    if (queryParameters == null || queryParameters.isEmpty) {
+      return uri;
+    }
+    return uri.replace(queryParameters: queryParameters);
   }
 
   void _ensureSuccess(http.Response response) {
@@ -296,6 +432,22 @@ class HydroApiService {
       }
       if (value is String) {
         return double.tryParse(value);
+      }
+    }
+    return null;
+  }
+
+  static int? _readInt(Map<String, dynamic> payload, List<String> keys) {
+    for (final key in keys) {
+      final value = payload[key];
+      if (value is int) {
+        return value;
+      }
+      if (value is num) {
+        return value.toInt();
+      }
+      if (value is String) {
+        return int.tryParse(value);
       }
     }
     return null;

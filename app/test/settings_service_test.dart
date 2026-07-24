@@ -19,6 +19,8 @@ void main() {
     final service = SettingsService(GetStorage('settings_service_test'));
 
     const settings = AppSettings(
+      transportMode: TransportMode.localNetwork,
+      localDeviceBaseUrl: 'http://192.168.1.50',
       backendBaseUrl: 'http://192.168.1.44:3000',
       refreshInterval: 8,
     );
@@ -43,6 +45,8 @@ void main() {
     expect(
       service.loadSettings(),
       const AppSettings(
+        transportMode: TransportMode.realServer,
+        localDeviceBaseUrl: AppSettings.defaultLocalDeviceBaseUrl,
         backendBaseUrl: '',
         refreshInterval: 8,
       ),
