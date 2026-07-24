@@ -11,6 +11,7 @@ function createRouter({ config, deviceService }) {
   router.get('/health', healthController.getHealth);
   router.get('/device', deviceController.getDevice);
   router.get('/device/status', deviceController.getDeviceStatus);
+  router.get('/device/ec-history', deviceController.getDeviceEcHistory);
   router.get('/device/events', deviceController.getDeviceEvents);
   router.post('/device/commands/pump', deviceController.postPumpCommand);
   router.post('/device/commands/light', deviceController.postLightCommand);
@@ -21,6 +22,28 @@ function createRouter({ config, deviceService }) {
   router.post(
     '/device/commands/nutrient/b',
     deviceController.postNutrientBCommand,
+  );
+  router.post('/device/commands/prime/a', deviceController.postPrimeACommand);
+  router.post('/device/commands/prime/b', deviceController.postPrimeBCommand);
+  router.post(
+    '/device/commands/target-dose/a',
+    deviceController.postTargetDoseACommand,
+  );
+  router.post(
+    '/device/commands/target-dose/b',
+    deviceController.postTargetDoseBCommand,
+  );
+  router.post(
+    '/device/commands/target-dose/ab',
+    deviceController.postTargetDoseAbCommand,
+  );
+  router.post(
+    '/device/commands/shot-dose/a',
+    deviceController.postShotDoseACommand,
+  );
+  router.post(
+    '/device/commands/shot-dose/b',
+    deviceController.postShotDoseBCommand,
   );
 
   return router;

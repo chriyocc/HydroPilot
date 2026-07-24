@@ -266,20 +266,21 @@ From your laptop or phone network, test:
 
 ```bash
 curl https://api2.yoyojun.site/api/health
-curl https://api.your-domain.com/api/device
-curl https://api.your-domain.com/api/device/status
+curl https://api2.yoyojun.site/api/device
+curl https://api2.yoyojun.site/api/device/status
+curl https://api2.yoyojun.site/api/device/ec-history
 ```
 
 Set the app backend URL to:
 
 ```text
-https://api.your-domain.com
+https://api2.yoyojun.site
 ```
 
 For the SSE endpoint, use this check:
 
 ```bash
-curl -N https://api.your-domain.com/api/device/events
+curl -N https://api2.yoyojun.site/api/device/events
 ```
 
 Expected behavior:
@@ -369,8 +370,8 @@ Self-hosted MQTT path:
 - Backend runs under systemd and restarts after reboot.
 - `.env` exists on the server and contains real MQTT credentials.
 - `curl http://127.0.0.1:3000/api/health` works on the server.
-- `curl https://api.your-domain.com/api/health` works from outside the server.
-- Flutter app backend URL is set to `https://api.your-domain.com`.
+- `curl https://api2.yoyojun.site/api/health` works from outside the server.
+- Flutter app backend URL is set to `https://api2.yoyojun.site`.
 - ESP32 and backend use the same `HYDRO_DEVICE_ID` and topic prefix.
 - MQTT broker receives ESP32 telemetry and backend commands.
 - SSE endpoint `/api/device/events` remains connected during app runtime.

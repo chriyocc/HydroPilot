@@ -279,14 +279,38 @@ Recommended topics:
 - `hydro/device/<deviceId>/cmd/light`
 - `hydro/device/<deviceId>/cmd/nutrient/a`
 - `hydro/device/<deviceId>/cmd/nutrient/b`
+- `hydro/device/<deviceId>/cmd/prime/a`
+- `hydro/device/<deviceId>/cmd/prime/b`
+- `hydro/device/<deviceId>/cmd/target-dose/a`
+- `hydro/device/<deviceId>/cmd/target-dose/b`
+- `hydro/device/<deviceId>/cmd/target-dose/ab`
+- `hydro/device/<deviceId>/cmd/shot-dose/a`
+- `hydro/device/<deviceId>/cmd/shot-dose/b`
 - `hydro/device/<deviceId>/state/pump`
 - `hydro/device/<deviceId>/state/light`
+- `hydro/device/<deviceId>/state/prime/a`
+- `hydro/device/<deviceId>/state/prime/b`
+- `hydro/device/<deviceId>/state/target-dose/a`
+- `hydro/device/<deviceId>/state/target-dose/b`
+- `hydro/device/<deviceId>/state/target-dose/ab`
+- `hydro/device/<deviceId>/state/shot-dose/a`
+- `hydro/device/<deviceId>/state/shot-dose/b`
 - `hydro/device/<deviceId>/telemetry/ph`
 - `hydro/device/<deviceId>/telemetry/ec`
 - `hydro/device/<deviceId>/telemetry/temp`
+- `hydro/device/<deviceId>/telemetry/humidity`
 - `hydro/device/<deviceId>/telemetry/waterlevel`
+- `hydro/device/<deviceId>/telemetry/distance`
+- `hydro/device/<deviceId>/telemetry/tds`
+- `hydro/device/<deviceId>/ec-history`
 - `hydro/device/<deviceId>/alarm`
 - `hydro/device/<deviceId>/availability`
+
+The current ESP32 firmware project in
+`/Users/yoyojun/Documents/GitHub/hydroponic_system` also publishes legacy topics
+such as `hydro/status`, `hydro/sensor/ec`, and `hydro/state/light`. The backend
+normalizes those topics into the same `/api/device/status` response during the
+migration.
 
 ### Command Payload
 
@@ -309,6 +333,18 @@ For nutrient dosing:
   "action": "dose",
   "ts": 1710000000,
   "source": "mobile-app"
+}
+```
+
+For target EC dosing:
+
+```json
+{
+  "requestId": "target-123",
+  "action": "toggle",
+  "concentration": 1.4,
+  "ts": "2026-07-24T14:00:00.000Z",
+  "source": "hydropilot-backend"
 }
 ```
 

@@ -153,6 +153,42 @@ test('GET /api/device/status marks telemetry and state stale based on configured
   assert.equal(snapshot.freshness.staleTelemetry, true);
 });
 
+test('GET /api/device/status includes expanded hydroponic sensors, routines, and EC history', () => {
+  const clock = createClock();
+  const config = createConfig();
+  const snapshotStore = createSnapshotStore({ config, now: clock.now });
+
+  const ts = new Date(clock.now()).toISOString();
+  snapshotStore.applyTelemetry({ field: 'humidity', value: 62.5, ts });
+  snapshotStore.applyTelemetry({ field: 'tds', value: 420, ts });
+  snapshotStore.applyTelemetry({ field: 'distance', value: 110, ts });
+  snapshotStore.applyState({ field: 'primeAOn', value: true, ts });
+  snapshotStore.applyState({ field: 'targetDoseAbOn', value: true, ts });
+  snapshotStore.applyState({ field: 'shotDoseBOn', value: false, ts });
+  snapshotStore.applyState({ field: 'liquidAWet', value: true, ts });
+  snapshotStore.applyState({ field: 'targetEcAb', value: 1.4, ts });
+  snapshotStore.applyEcHistory({
+    periodMs: 2000,
+    windowMs: 180000,
+    ecValues: [1200, 1300, 1413],
+    ts,
+  });
+
+  const snapshot = snapshotStore.getSnapshot();
+
+  assert.equal(snapshot.sensors.humidity, 62.5);
+  assert.equal(snapshot.sensors.tds, 420);
+  assert.equal(snapshot.sensors.distance, 110);
+  assert.equal(snapshot.deviceState.primeAOn, true);
+  assert.equal(snapshot.deviceState.targetDoseAbOn, true);
+  assert.equal(snapshot.deviceState.shotDoseBOn, false);
+  assert.equal(snapshot.deviceState.liquidAWet, true);
+  assert.equal(snapshot.deviceState.targetEcAb, 1.4);
+  assert.deepEqual(snapshot.ecHistory.ecValues, [1200, 1300, 1413]);
+  assert.equal(snapshot.ecHistory.periodMs, 2000);
+  assert.equal(snapshot.timestamps.lastEcHistoryAt, ts);
+});
+
 test('POST /api/device/commands/pump accepts command publication and rejects unknown fields', async () => {
   const clock = createClock();
   const config = createConfig();
@@ -200,6 +236,102 @@ test('POST /api/device/commands/pump accepts command publication and rejects unk
       publisher.calls[0].topic,
       'hydro/device/device-1/cmd/pump',
     );
+  } finally {
+    await server.close();
+  }
+});
+
+test('POST expanded dosing commands publish expected MQTT payloads', async () => {
+  const clock = createClock();
+  const config = createConfig();
+  const publisher = createPublishRecorder();
+  const snapshotStore = createSnapshotStore({ config, now: clock.now });
+  const eventStream = createEventStream();
+  const commandService = createCommandService({
+    config,
+    publisher,
+    eventStream,
+    now: clock.now,
+  });
+  const deviceService = createDeviceService({
+    config,
+    snapshotStore,
+    eventStream,
+    commandService,
+  });
+  const app = createApp({ config, deviceService });
+  const server = await startServer(app);
+
+  try {
+    const primeResponse = await fetch(`${server.baseUrl}/api/device/commands/prime/a`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ toggle: true }),
+    });
+    const targetResponse = await fetch(`${server.baseUrl}/api/device/commands/target-dose/ab`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ concentration: 1.7 }),
+    });
+    const shotResponse = await fetch(`${server.baseUrl}/api/device/commands/shot-dose/b`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ start: true }),
+    });
+
+    assert.equal(primeResponse.status, 202);
+    assert.equal(targetResponse.status, 202);
+    assert.equal(shotResponse.status, 202);
+    assert.deepEqual(
+      publisher.calls.map((call) => call.topic),
+      [
+        'hydro/device/device-1/cmd/prime/a',
+        'hydro/device/device-1/cmd/target-dose/ab',
+        'hydro/device/device-1/cmd/shot-dose/b',
+      ],
+    );
+    assert.equal(JSON.parse(publisher.calls[0].payload).action, 'toggle');
+    assert.equal(JSON.parse(publisher.calls[1].payload).concentration, 1.7);
+    assert.equal(JSON.parse(publisher.calls[2].payload).action, 'start');
+  } finally {
+    await server.close();
+  }
+});
+
+test('GET /api/device/ec-history returns latest EC history', async () => {
+  const clock = createClock();
+  const config = createConfig();
+  const snapshotStore = createSnapshotStore({ config, now: clock.now });
+  const eventStream = createEventStream();
+  const commandService = createCommandService({
+    config,
+    publisher: createPublishRecorder(),
+    eventStream,
+    now: clock.now,
+  });
+  const deviceService = createDeviceService({
+    config,
+    snapshotStore,
+    eventStream,
+    commandService,
+  });
+  snapshotStore.applyEcHistory({
+    periodMs: 2000,
+    windowMs: 180000,
+    ecValues: [1200, 1413],
+    ts: new Date(clock.now()).toISOString(),
+  });
+  const app = createApp({ config, deviceService });
+  const server = await startServer(app);
+
+  try {
+    const response = await fetch(`${server.baseUrl}/api/device/ec-history`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      periodMs: 2000,
+      windowMs: 180000,
+      ecValues: [1200, 1413],
+    });
   } finally {
     await server.close();
   }

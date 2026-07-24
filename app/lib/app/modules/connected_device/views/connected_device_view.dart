@@ -53,10 +53,11 @@ class ConnectedDeviceView extends GetView<HomeController> {
               ],
             ),
             const SizedBox(height: 22),
-            if (isLocal)
-              _LocalDosingControls(controller: controller)
-            else
+            if (!isLocal) ...[
               _RemoteDosingControls(controller: controller),
+              const SizedBox(height: 22),
+            ],
+            _LocalDosingControls(controller: controller),
           ],
         );
       },

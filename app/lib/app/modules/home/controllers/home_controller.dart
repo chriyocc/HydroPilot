@@ -121,9 +121,7 @@ class HomeController extends GetxController {
           ? await _apiService.fetchLocalStatus(settings.localDeviceBaseUrl)
           : await _apiService.fetchStatus(settings.backendBaseUrl);
       _applySnapshot(snapshot);
-      if (settings.usesLocalNetwork) {
-        await _refreshLocalEcHistory();
-      }
+      await _refreshEcHistory();
     } catch (_) {
       runtimeStatus = runtimeStatus.copyWith(
         isBackendReachable: false,
@@ -385,6 +383,9 @@ class HomeController extends GetxController {
         break;
       case 'alarm':
         break;
+      case 'ec-history':
+        _applyEcHistoryDelta(event.payload);
+        break;
       case 'command-result':
         _handleCommandResult(event.payload);
         break;
@@ -449,22 +450,65 @@ class HomeController extends GetxController {
   }
 
   Future<void> togglePrimeA() {
-    return _runLocalToggle(type: CommandType.primeA, device: 'prime_a');
+    if (settings.usesLocalNetwork) {
+      return _runLocalToggle(type: CommandType.primeA, device: 'prime_a');
+    }
+
+    return _runCommand(
+      type: CommandType.primeA,
+      action: () => _apiService.togglePrimeA(settings.backendBaseUrl),
+      pendingMessage: 'Prime line A command sent.',
+    );
   }
 
   Future<void> togglePrimeB() {
-    return _runLocalToggle(type: CommandType.primeB, device: 'prime_b');
+    if (settings.usesLocalNetwork) {
+      return _runLocalToggle(type: CommandType.primeB, device: 'prime_b');
+    }
+
+    return _runCommand(
+      type: CommandType.primeB,
+      action: () => _apiService.togglePrimeB(settings.backendBaseUrl),
+      pendingMessage: 'Prime line B command sent.',
+    );
   }
 
   Future<void> startShotDoseA() {
-    return _runLocalToggle(type: CommandType.shotDoseA, device: 'shot_dose_a');
+    if (settings.usesLocalNetwork) {
+      return _runLocalToggle(type: CommandType.shotDoseA, device: 'shot_dose_a');
+    }
+
+    return _runCommand(
+      type: CommandType.shotDoseA,
+      action: () => _apiService.startShotDoseA(settings.backendBaseUrl),
+      pendingMessage: 'Shot dose A command sent.',
+    );
   }
 
   Future<void> startShotDoseB() {
-    return _runLocalToggle(type: CommandType.shotDoseB, device: 'shot_dose_b');
+    if (settings.usesLocalNetwork) {
+      return _runLocalToggle(type: CommandType.shotDoseB, device: 'shot_dose_b');
+    }
+
+    return _runCommand(
+      type: CommandType.shotDoseB,
+      action: () => _apiService.startShotDoseB(settings.backendBaseUrl),
+      pendingMessage: 'Shot dose B command sent.',
+    );
   }
 
   Future<void> toggleTargetDoseA() {
+    if (!settings.usesLocalNetwork) {
+      return _runCommand(
+        type: CommandType.targetDoseA,
+        action: () => _apiService.toggleTargetDoseA(
+          settings.backendBaseUrl,
+          targetEcA,
+        ),
+        pendingMessage: 'Target dose A command sent.',
+      );
+    }
+
     return _runLocalToggle(
       type: CommandType.targetDoseA,
       device: 'target_dose_a',
@@ -473,6 +517,17 @@ class HomeController extends GetxController {
   }
 
   Future<void> toggleTargetDoseB() {
+    if (!settings.usesLocalNetwork) {
+      return _runCommand(
+        type: CommandType.targetDoseB,
+        action: () => _apiService.toggleTargetDoseB(
+          settings.backendBaseUrl,
+          targetEcB,
+        ),
+        pendingMessage: 'Target dose B command sent.',
+      );
+    }
+
     return _runLocalToggle(
       type: CommandType.targetDoseB,
       device: 'target_dose_b',
@@ -481,6 +536,17 @@ class HomeController extends GetxController {
   }
 
   Future<void> toggleTargetDoseAb() {
+    if (!settings.usesLocalNetwork) {
+      return _runCommand(
+        type: CommandType.targetDoseAb,
+        action: () => _apiService.toggleTargetDoseAb(
+          settings.backendBaseUrl,
+          targetEcAb,
+        ),
+        pendingMessage: 'Target dose A+B command sent.',
+      );
+    }
+
     return _runLocalToggle(
       type: CommandType.targetDoseAb,
       device: 'target_dose_ab',
@@ -491,26 +557,24 @@ class HomeController extends GetxController {
   void _applySnapshot(HydroStatusSnapshot snapshot) {
     sensorData = snapshot.sensorData;
     deviceState = snapshot.deviceState;
-    if (settings.usesLocalNetwork) {
-      targetEcA = snapshot.deviceState.targetEcA ?? targetEcA;
-      targetEcB = snapshot.deviceState.targetEcB ?? targetEcB;
-      targetEcAb = snapshot.deviceState.targetEcAb ?? targetEcAb;
-    }
+    targetEcA = snapshot.deviceState.targetEcA ?? targetEcA;
+    targetEcB = snapshot.deviceState.targetEcB ?? targetEcB;
+    targetEcAb = snapshot.deviceState.targetEcAb ?? targetEcAb;
     runtimeStatus = snapshot.runtimeStatus.copyWith(
       isStreamConnected: runtimeStatus.isStreamConnected,
     );
     _recomputeStatusMessage();
   }
 
-  Future<void> _refreshLocalEcHistory() async {
-    if (!settings.usesLocalNetwork || !hasLocalDeviceConfigured) {
+  Future<void> _refreshEcHistory() async {
+    if (!hasActiveTransportConfigured) {
       return;
     }
 
     try {
-      ecHistory = await _apiService.fetchLocalEcHistory(
-        settings.localDeviceBaseUrl,
-      );
+      ecHistory = settings.usesLocalNetwork
+          ? await _apiService.fetchLocalEcHistory(settings.localDeviceBaseUrl)
+          : await _apiService.fetchEcHistory(settings.backendBaseUrl);
     } catch (_) {
       // EC history is secondary to control/status, so keep the last chart data.
     }
@@ -530,6 +594,9 @@ class HomeController extends GetxController {
           waterTemperature: _toDouble(value),
         ),
       'waterLevel' => sensorData.copyWith(waterLevel: _toDouble(value)),
+      'humidity' => sensorData.copyWith(humidity: _toDouble(value)),
+      'tds' => sensorData.copyWith(tds: _toDouble(value)),
+      'distance' => sensorData.copyWith(distance: _toDouble(value)),
       _ => sensorData,
     };
   }
@@ -545,6 +612,36 @@ class HomeController extends GetxController {
       deviceState = deviceState.copyWith(pumpOn: value as bool?);
     } else if (field == 'lightOn') {
       deviceState = deviceState.copyWith(lightOn: value as bool?);
+    } else if (field == 'primeAOn') {
+      deviceState = deviceState.copyWith(primeAOn: value as bool?);
+    } else if (field == 'primeBOn') {
+      deviceState = deviceState.copyWith(primeBOn: value as bool?);
+    } else if (field == 'targetDoseAOn') {
+      deviceState = deviceState.copyWith(targetDoseAOn: value as bool?);
+    } else if (field == 'targetDoseBOn') {
+      deviceState = deviceState.copyWith(targetDoseBOn: value as bool?);
+    } else if (field == 'targetDoseAbOn') {
+      deviceState = deviceState.copyWith(targetDoseAbOn: value as bool?);
+    } else if (field == 'shotDoseAOn') {
+      deviceState = deviceState.copyWith(shotDoseAOn: value as bool?);
+    } else if (field == 'shotDoseBOn') {
+      deviceState = deviceState.copyWith(shotDoseBOn: value as bool?);
+    } else if (field == 'liquidAWet') {
+      deviceState = deviceState.copyWith(liquidAWet: value as bool?);
+    } else if (field == 'liquidBWet') {
+      deviceState = deviceState.copyWith(liquidBWet: value as bool?);
+    } else if (field == 'targetEcA') {
+      final nextValue = _toDouble(value);
+      deviceState = deviceState.copyWith(targetEcA: nextValue);
+      targetEcA = nextValue ?? targetEcA;
+    } else if (field == 'targetEcB') {
+      final nextValue = _toDouble(value);
+      deviceState = deviceState.copyWith(targetEcB: nextValue);
+      targetEcB = nextValue ?? targetEcB;
+    } else if (field == 'targetEcAb') {
+      final nextValue = _toDouble(value);
+      deviceState = deviceState.copyWith(targetEcAb: nextValue);
+      targetEcAb = nextValue ?? targetEcAb;
     }
 
     final requestId = payload['requestId'] as String?;
@@ -555,6 +652,10 @@ class HomeController extends GetxController {
         lastActionMessage = '${_commandLabel(type)} updated.';
       }
     }
+  }
+
+  void _applyEcHistoryDelta(Map<String, dynamic> payload) {
+    ecHistory = HydroEcHistory.fromPayload(payload);
   }
 
   void _handleCommandResult(Map<String, dynamic> payload) {

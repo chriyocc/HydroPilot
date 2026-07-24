@@ -14,10 +14,32 @@ function createSnapshotStore({ config, now }) {
       ec: null,
       waterTemperature: null,
       waterLevel: null,
+      humidity: null,
+      tds: null,
+      distance: null,
     },
     deviceState: {
       pumpOn: null,
       lightOn: null,
+      nutrientAOn: null,
+      nutrientBOn: null,
+      primeAOn: null,
+      primeBOn: null,
+      targetDoseAOn: null,
+      targetDoseBOn: null,
+      targetDoseAbOn: null,
+      shotDoseAOn: null,
+      shotDoseBOn: null,
+      liquidAWet: null,
+      liquidBWet: null,
+      targetEcA: null,
+      targetEcB: null,
+      targetEcAb: null,
+    },
+    ecHistory: {
+      periodMs: 0,
+      windowMs: 0,
+      ecValues: [],
     },
     alarms: {
       latest: null,
@@ -27,6 +49,7 @@ function createSnapshotStore({ config, now }) {
       lastStateAt: null,
       lastAvailabilityAt: null,
       lastAlarmAt: null,
+      lastEcHistoryAt: null,
     },
   };
 
@@ -98,6 +121,15 @@ function createSnapshotStore({ config, now }) {
     snapshot.timestamps.lastAlarmAt = ts;
   }
 
+  function applyEcHistory({ periodMs, windowMs, ecValues, ts }) {
+    snapshot.ecHistory = {
+      periodMs: Number.isFinite(periodMs) ? periodMs : 0,
+      windowMs: Number.isFinite(windowMs) ? windowMs : 0,
+      ecValues: Array.isArray(ecValues) ? [...ecValues] : [],
+    };
+    snapshot.timestamps.lastEcHistoryAt = ts;
+  }
+
   function getSnapshot() {
     return {
       deviceId: snapshot.deviceId,
@@ -105,6 +137,10 @@ function createSnapshotStore({ config, now }) {
       availability: { ...snapshot.availability },
       sensors: { ...snapshot.sensors },
       deviceState: { ...snapshot.deviceState },
+      ecHistory: {
+        ...snapshot.ecHistory,
+        ecValues: [...snapshot.ecHistory.ecValues],
+      },
       alarms: { ...snapshot.alarms },
       timestamps: { ...snapshot.timestamps },
       freshness: getFreshness(),
@@ -117,6 +153,7 @@ function createSnapshotStore({ config, now }) {
     applyTelemetry,
     applyState,
     applyAlarm,
+    applyEcHistory,
     getSnapshot,
   };
 }

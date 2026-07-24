@@ -164,6 +164,41 @@ void main() {
     expect(client.requests.first.method, 'POST');
   });
 
+  test('remote routine command helpers post to backend command endpoints',
+      () async {
+    final client = QueueHttpClient([
+      http.Response('{"requestId":"prime-1","status":"accepted"}', 202),
+      http.Response('{"requestId":"target-1","status":"accepted"}', 202),
+      http.Response('{"requestId":"shot-1","status":"accepted"}', 202),
+    ]);
+    final service = HydroApiService(client: client);
+
+    await service.togglePrimeA('https://api2.yoyojun.site');
+    await service.toggleTargetDoseAb('https://api2.yoyojun.site', 1.7);
+    await service.startShotDoseB('https://api2.yoyojun.site');
+
+    expect(
+      client.requests.map((request) => request.url.toString()),
+      [
+        'https://api2.yoyojun.site/api/device/commands/prime/a',
+        'https://api2.yoyojun.site/api/device/commands/target-dose/ab',
+        'https://api2.yoyojun.site/api/device/commands/shot-dose/b',
+      ],
+    );
+    expect(
+      client.requests.map((request) => request.method),
+      ['POST', 'POST', 'POST'],
+    );
+    expect(
+      client.requests.map((request) => request is http.Request ? request.body : ''),
+      [
+        '{"toggle":true}',
+        '{"concentration":1.7}',
+        '{"start":true}',
+      ],
+    );
+  });
+
   test('fetchLocalEcHistory parses firmware EC history payload', () async {
     final client = QueueHttpClient([
       http.Response(

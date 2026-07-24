@@ -1,5 +1,6 @@
 function createTopicMap(config) {
   const baseTopic = `${config.hydroTopicPrefix}/device/${config.hydroDeviceId}`;
+  const legacyRoot = config.hydroTopicPrefix;
 
   return {
     baseTopic,
@@ -9,14 +10,54 @@ function createTopicMap(config) {
     stateLight: `${baseTopic}/state/light`,
     stateNutrientA: `${baseTopic}/state/nutrient/a`,
     stateNutrientB: `${baseTopic}/state/nutrient/b`,
+    statePrimeA: `${baseTopic}/state/prime/a`,
+    statePrimeB: `${baseTopic}/state/prime/b`,
+    stateTargetDoseA: `${baseTopic}/state/target-dose/a`,
+    stateTargetDoseB: `${baseTopic}/state/target-dose/b`,
+    stateTargetDoseAb: `${baseTopic}/state/target-dose/ab`,
+    stateShotDoseA: `${baseTopic}/state/shot-dose/a`,
+    stateShotDoseB: `${baseTopic}/state/shot-dose/b`,
+    stateLiquidA: `${baseTopic}/state/liquid/a`,
+    stateLiquidB: `${baseTopic}/state/liquid/b`,
     telemetryPh: `${baseTopic}/telemetry/ph`,
     telemetryEc: `${baseTopic}/telemetry/ec`,
     telemetryTemp: `${baseTopic}/telemetry/temp`,
+    telemetryHumidity: `${baseTopic}/telemetry/humidity`,
     telemetryWaterLevel: `${baseTopic}/telemetry/waterlevel`,
+    telemetryDistance: `${baseTopic}/telemetry/distance`,
+    telemetryTds: `${baseTopic}/telemetry/tds`,
+    ecHistory: `${baseTopic}/ec-history`,
     cmdPump: `${baseTopic}/cmd/pump`,
     cmdLight: `${baseTopic}/cmd/light`,
     cmdNutrientA: `${baseTopic}/cmd/nutrient/a`,
     cmdNutrientB: `${baseTopic}/cmd/nutrient/b`,
+    cmdPrimeA: `${baseTopic}/cmd/prime/a`,
+    cmdPrimeB: `${baseTopic}/cmd/prime/b`,
+    cmdTargetDoseA: `${baseTopic}/cmd/target-dose/a`,
+    cmdTargetDoseB: `${baseTopic}/cmd/target-dose/b`,
+    cmdTargetDoseAb: `${baseTopic}/cmd/target-dose/ab`,
+    cmdShotDoseA: `${baseTopic}/cmd/shot-dose/a`,
+    cmdShotDoseB: `${baseTopic}/cmd/shot-dose/b`,
+    legacyStatus: `${legacyRoot}/status`,
+    legacySensorTemperature: `${legacyRoot}/sensor/temperature`,
+    legacySensorHumidity: `${legacyRoot}/sensor/humidity`,
+    legacySensorWaterLevel: `${legacyRoot}/sensor/water_level`,
+    legacySensorDistance: `${legacyRoot}/sensor/distance`,
+    legacySensorEc: `${legacyRoot}/sensor/ec`,
+    legacySensorTds: `${legacyRoot}/sensor/tds`,
+    legacySensorLiquid1: `${legacyRoot}/sensor/liquid1`,
+    legacySensorLiquid2: `${legacyRoot}/sensor/liquid2`,
+    legacyStatePump: `${legacyRoot}/state/pump`,
+    legacyStateLight: `${legacyRoot}/state/light`,
+    legacyStateNutrientA: `${legacyRoot}/state/fert_a`,
+    legacyStateNutrientB: `${legacyRoot}/state/fert_b`,
+    legacyStatePrimeA: `${legacyRoot}/state/prime_a`,
+    legacyStatePrimeB: `${legacyRoot}/state/prime_b`,
+    legacyStateTargetDoseA: `${legacyRoot}/state/target_dose_a`,
+    legacyStateTargetDoseB: `${legacyRoot}/state/target_dose_b`,
+    legacyStateTargetDoseAb: `${legacyRoot}/state/target_dose_ab`,
+    legacyStateShotDoseA: `${legacyRoot}/state/shot_dose_a`,
+    legacyStateShotDoseB: `${legacyRoot}/state/shot_dose_b`,
   };
 }
 
@@ -99,6 +140,12 @@ function readTimestamp(payload) {
   return new Date().toISOString();
 }
 
+function readRequestId(payload) {
+  return typeof payload === 'object' && payload !== null
+    ? payload.requestId ?? null
+    : null;
+}
+
 function createMqttGateway({ config, mqttClient, deviceService, logger }) {
   const topics = createTopicMap(config);
   const subscriptions = [
@@ -108,10 +155,43 @@ function createMqttGateway({ config, mqttClient, deviceService, logger }) {
     topics.stateLight,
     topics.stateNutrientA,
     topics.stateNutrientB,
+    topics.statePrimeA,
+    topics.statePrimeB,
+    topics.stateTargetDoseA,
+    topics.stateTargetDoseB,
+    topics.stateTargetDoseAb,
+    topics.stateShotDoseA,
+    topics.stateShotDoseB,
+    topics.stateLiquidA,
+    topics.stateLiquidB,
     topics.telemetryPh,
     topics.telemetryEc,
     topics.telemetryTemp,
+    topics.telemetryHumidity,
     topics.telemetryWaterLevel,
+    topics.telemetryDistance,
+    topics.telemetryTds,
+    topics.ecHistory,
+    topics.legacyStatus,
+    topics.legacySensorTemperature,
+    topics.legacySensorHumidity,
+    topics.legacySensorWaterLevel,
+    topics.legacySensorDistance,
+    topics.legacySensorEc,
+    topics.legacySensorTds,
+    topics.legacySensorLiquid1,
+    topics.legacySensorLiquid2,
+    topics.legacyStatePump,
+    topics.legacyStateLight,
+    topics.legacyStateNutrientA,
+    topics.legacyStateNutrientB,
+    topics.legacyStatePrimeA,
+    topics.legacyStatePrimeB,
+    topics.legacyStateTargetDoseA,
+    topics.legacyStateTargetDoseB,
+    topics.legacyStateTargetDoseAb,
+    topics.legacyStateShotDoseA,
+    topics.legacyStateShotDoseB,
   ];
 
   async function subscribeAll() {
@@ -136,6 +216,120 @@ function createMqttGateway({ config, mqttClient, deviceService, logger }) {
     deviceService.setBrokerStatus('disconnected');
   }
 
+  function applyTelemetry(field, value, ts) {
+    logger?.info('Telemetry received', {
+      deviceId: config.hydroDeviceId,
+      field,
+      value,
+    });
+    deviceService.handleTelemetry({ field, value, ts });
+  }
+
+  function applyState(field, value, payload, ts) {
+    logger?.info('State update received', {
+      deviceId: config.hydroDeviceId,
+      field,
+      value,
+    });
+    deviceService.handleState({
+      field,
+      value,
+      requestId: readRequestId(payload),
+      ts,
+    });
+  }
+
+  function applyStatusPayload(payload, ts) {
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      return;
+    }
+
+    for (const [field, keys] of [
+      ['waterTemperature', ['waterTemperature', 'water_temperature', 'temp', 'temperature']],
+      ['humidity', ['humidity']],
+      ['waterLevel', ['waterLevel', 'water_level', 'water']],
+      ['tds', ['tds']],
+      ['ec', ['ec']],
+      ['distance', ['distance']],
+    ]) {
+      const value = readNumber(payload, keys);
+      if (value !== null) {
+        applyTelemetry(field, value, ts);
+      }
+    }
+
+    for (const [field, keys] of [
+      ['pumpOn', ['pumpOn', 'pump_on', 'pump']],
+      ['lightOn', ['lightOn', 'light_on', 'light']],
+      ['nutrientAOn', ['nutrientAOn', 'fert_a', 'nutrient_a']],
+      ['nutrientBOn', ['nutrientBOn', 'fert_b', 'nutrient_b']],
+      ['primeAOn', ['primeAOn', 'prime_a']],
+      ['primeBOn', ['primeBOn', 'prime_b']],
+      ['targetDoseAOn', ['targetDoseAOn', 'target_dose_a']],
+      ['targetDoseBOn', ['targetDoseBOn', 'target_dose_b']],
+      ['targetDoseAbOn', ['targetDoseAbOn', 'target_dose_ab']],
+      ['shotDoseAOn', ['shotDoseAOn', 'shot_dose_a']],
+      ['shotDoseBOn', ['shotDoseBOn', 'shot_dose_b']],
+      ['liquidAWet', ['liquidAWet', 'liquid1']],
+      ['liquidBWet', ['liquidBWet', 'liquid2']],
+    ]) {
+      const value = readBoolean(payload, keys);
+      if (value !== null) {
+        applyState(field, value, payload, ts);
+      }
+    }
+
+    for (const [field, keys] of [
+      ['targetEcA', ['targetEcA', 'target_ec_a']],
+      ['targetEcB', ['targetEcB', 'target_ec_b']],
+      ['targetEcAb', ['targetEcAb', 'target_ec_ab']],
+    ]) {
+      const value = readNumber(payload, keys);
+      if (value !== null) {
+        applyState(field, value, payload, ts);
+      }
+    }
+  }
+
+  function applyEcHistory(payload, ts) {
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      return;
+    }
+
+    const values = payload.ecValues ?? payload.ec;
+    deviceService.handleEcHistory({
+      periodMs: readNumber(payload, ['periodMs', 'period_ms']) ?? 0,
+      windowMs: readNumber(payload, ['windowMs', 'window_ms']) ?? 0,
+      ecValues: Array.isArray(values)
+        ? values
+            .map((value) =>
+              typeof value === 'number' ? value : Number(value),
+            )
+            .filter((value) => !Number.isNaN(value))
+        : [],
+      ts,
+    });
+  }
+
+  function applyTargetDoseState(field, payload, ts) {
+    applyState(
+      field,
+      readBoolean(payload, ['active', 'on', 'value']) ?? false,
+      payload,
+      ts,
+    );
+    const targetEcField =
+      field === 'targetDoseAOn'
+        ? 'targetEcA'
+        : field === 'targetDoseBOn'
+          ? 'targetEcB'
+          : 'targetEcAb';
+    const targetEc = readNumber(payload, ['targetEc', 'target_ec', 'concentration']);
+    if (targetEc !== null) {
+      applyState(targetEcField, targetEc, payload, ts);
+    }
+  }
+
   function handleMessage(topic, buffer) {
     const payload = parsePayload(buffer);
     const ts = readTimestamp(payload);
@@ -144,7 +338,10 @@ function createMqttGateway({ config, mqttClient, deviceService, logger }) {
       case topics.availability:
         deviceService.handleAvailability({
           online: readBoolean(payload, ['online', 'available', 'status']),
-          status: typeof payload === 'object' && payload !== null ? payload.status : null,
+          status:
+            typeof payload === 'object' && payload !== null
+              ? payload.status
+              : null,
           ts,
         });
         return;
@@ -158,114 +355,89 @@ function createMqttGateway({ config, mqttClient, deviceService, logger }) {
         });
         return;
       case topics.statePump:
-        logger?.info('State update received', {
-          deviceId: config.hydroDeviceId,
-          field: 'pumpOn',
-          value: readBoolean(payload, ['on', 'value', 'pumpOn', 'pump']),
-        });
-        deviceService.handleState({
-          field: 'pumpOn',
-          value: readBoolean(payload, ['on', 'value', 'pumpOn', 'pump']),
-          requestId:
-            typeof payload === 'object' && payload !== null
-              ? payload.requestId ?? null
-              : null,
-          ts,
-        });
+      case topics.legacyStatePump:
+        applyState('pumpOn', readBoolean(payload, ['on', 'value', 'pumpOn', 'pump']), payload, ts);
         return;
       case topics.stateLight:
-        logger?.info('State update received', {
-          deviceId: config.hydroDeviceId,
-          field: 'lightOn',
-          value: readBoolean(payload, ['on', 'value', 'lightOn', 'light']),
-        });
-        deviceService.handleState({
-          field: 'lightOn',
-          value: readBoolean(payload, ['on', 'value', 'lightOn', 'light']),
-          requestId:
-            typeof payload === 'object' && payload !== null
-              ? payload.requestId ?? null
-              : null,
-          ts,
-        });
+      case topics.legacyStateLight:
+        applyState('lightOn', readBoolean(payload, ['on', 'value', 'lightOn', 'light']), payload, ts);
         return;
       case topics.stateNutrientA:
-        logger?.info('Nutrient result received', {
-          deviceId: config.hydroDeviceId,
-          channel: 'a',
-        });
-        deviceService.handleState({
-          field: 'nutrientA',
-          value: readBoolean(payload, ['ok', 'value']),
-          requestId:
-            typeof payload === 'object' && payload !== null
-              ? payload.requestId ?? null
-              : null,
-          ts,
-        });
+      case topics.legacyStateNutrientA:
+        applyState('nutrientAOn', readBoolean(payload, ['ok', 'on', 'value']), payload, ts);
         return;
       case topics.stateNutrientB:
-        logger?.info('Nutrient result received', {
-          deviceId: config.hydroDeviceId,
-          channel: 'b',
-        });
-        deviceService.handleState({
-          field: 'nutrientB',
-          value: readBoolean(payload, ['ok', 'value']),
-          requestId:
-            typeof payload === 'object' && payload !== null
-              ? payload.requestId ?? null
-              : null,
-          ts,
-        });
+      case topics.legacyStateNutrientB:
+        applyState('nutrientBOn', readBoolean(payload, ['ok', 'on', 'value']), payload, ts);
+        return;
+      case topics.statePrimeA:
+      case topics.legacyStatePrimeA:
+        applyState('primeAOn', readBoolean(payload, ['active', 'on', 'value']), payload, ts);
+        return;
+      case topics.statePrimeB:
+      case topics.legacyStatePrimeB:
+        applyState('primeBOn', readBoolean(payload, ['active', 'on', 'value']), payload, ts);
+        return;
+      case topics.stateTargetDoseA:
+      case topics.legacyStateTargetDoseA:
+        applyTargetDoseState('targetDoseAOn', payload, ts);
+        return;
+      case topics.stateTargetDoseB:
+      case topics.legacyStateTargetDoseB:
+        applyTargetDoseState('targetDoseBOn', payload, ts);
+        return;
+      case topics.stateTargetDoseAb:
+      case topics.legacyStateTargetDoseAb:
+        applyTargetDoseState('targetDoseAbOn', payload, ts);
+        return;
+      case topics.stateShotDoseA:
+      case topics.legacyStateShotDoseA:
+        applyState('shotDoseAOn', readBoolean(payload, ['active', 'on', 'value']), payload, ts);
+        return;
+      case topics.stateShotDoseB:
+      case topics.legacyStateShotDoseB:
+        applyState('shotDoseBOn', readBoolean(payload, ['active', 'on', 'value']), payload, ts);
+        return;
+      case topics.stateLiquidA:
+      case topics.legacySensorLiquid1:
+        applyState('liquidAWet', readBoolean(payload, ['wet', 'on', 'value', 'liquid1']), payload, ts);
+        return;
+      case topics.stateLiquidB:
+      case topics.legacySensorLiquid2:
+        applyState('liquidBWet', readBoolean(payload, ['wet', 'on', 'value', 'liquid2']), payload, ts);
         return;
       case topics.telemetryPh:
-        logger?.info('Telemetry received', {
-          deviceId: config.hydroDeviceId,
-          field: 'ph',
-          value: readNumber(payload, ['value', 'ph']),
-        });
-        deviceService.handleTelemetry({
-          field: 'ph',
-          value: readNumber(payload, ['value', 'ph']),
-          ts,
-        });
+        applyTelemetry('ph', readNumber(payload, ['value', 'ph']), ts);
         return;
       case topics.telemetryEc:
-        logger?.info('Telemetry received', {
-          deviceId: config.hydroDeviceId,
-          field: 'ec',
-          value: readNumber(payload, ['value', 'ec']),
-        });
-        deviceService.handleTelemetry({
-          field: 'ec',
-          value: readNumber(payload, ['value', 'ec']),
-          ts,
-        });
+      case topics.legacySensorEc:
+        applyTelemetry('ec', readNumber(payload, ['value', 'ec']), ts);
         return;
       case topics.telemetryTemp:
-        logger?.info('Telemetry received', {
-          deviceId: config.hydroDeviceId,
-          field: 'waterTemperature',
-          value: readNumber(payload, ['value', 'temp', 'temperature', 'waterTemperature']),
-        });
-        deviceService.handleTelemetry({
-          field: 'waterTemperature',
-          value: readNumber(payload, ['value', 'temp', 'temperature', 'waterTemperature']),
-          ts,
-        });
+      case topics.legacySensorTemperature:
+        applyTelemetry('waterTemperature', readNumber(payload, ['value', 'temp', 'temperature', 'waterTemperature']), ts);
+        return;
+      case topics.telemetryHumidity:
+      case topics.legacySensorHumidity:
+        applyTelemetry('humidity', readNumber(payload, ['value', 'humidity']), ts);
         return;
       case topics.telemetryWaterLevel:
-        logger?.info('Telemetry received', {
-          deviceId: config.hydroDeviceId,
-          field: 'waterLevel',
-          value: readNumber(payload, ['value', 'level', 'waterLevel']),
-        });
-        deviceService.handleTelemetry({
-          field: 'waterLevel',
-          value: readNumber(payload, ['value', 'level', 'waterLevel']),
-          ts,
-        });
+      case topics.legacySensorWaterLevel:
+        applyTelemetry('waterLevel', readNumber(payload, ['value', 'level', 'waterLevel', 'water']), ts);
+        return;
+      case topics.telemetryDistance:
+      case topics.legacySensorDistance:
+        applyTelemetry('distance', readNumber(payload, ['value', 'distance']), ts);
+        return;
+      case topics.telemetryTds:
+      case topics.legacySensorTds:
+        applyTelemetry('tds', readNumber(payload, ['value', 'tds']), ts);
+        return;
+      case topics.ecHistory:
+        applyEcHistory(payload, ts);
+        return;
+      case topics.legacyStatus:
+        applyStatusPayload(payload, ts);
         return;
       default:
         return;

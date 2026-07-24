@@ -371,6 +371,32 @@ void main() {
     expect(apiService.lastToggleConcentration, 1.7);
     expect(controller.isCommandPending(CommandType.targetDoseAb), false);
   });
+
+  test('real server target dose uses backend command path', () async {
+    final apiService = FakeHydroApiService();
+    final settingsService = await createSettingsService(
+      const AppSettings(
+        transportMode: TransportMode.realServer,
+        localDeviceBaseUrl: AppSettings.defaultLocalDeviceBaseUrl,
+        backendBaseUrl: 'https://api2.yoyojun.site',
+        refreshInterval: 0,
+      ),
+    );
+    final controller = HomeController(
+      settingsService: settingsService,
+      apiService: apiService,
+      enableAutoRefresh: false,
+    );
+
+    controller.onInit();
+    await Future<void>.delayed(Duration.zero);
+    controller.setTargetEcAb('1.8');
+    await controller.toggleTargetDoseAb();
+
+    expect(apiService.lastRemoteTargetDoseBaseUrl, 'https://api2.yoyojun.site');
+    expect(apiService.lastRemoteTargetDoseConcentration, 1.8);
+    expect(controller.isCommandPending(CommandType.targetDoseAb), true);
+  });
 }
 
 Future<SettingsService> createSettingsService(AppSettings settings) async {
@@ -391,6 +417,8 @@ class FakeHydroApiService extends HydroApiService {
   bool? lastLocalPumpValue;
   String? lastToggledDevice;
   double? lastToggleConcentration;
+  String? lastRemoteTargetDoseBaseUrl;
+  double? lastRemoteTargetDoseConcentration;
   int localStatusCallCount = 0;
   int localNutrientACallCount = 0;
   int openEventStreamCallCount = 0;
@@ -469,7 +497,29 @@ class FakeHydroApiService extends HydroApiService {
   }
 
   @override
+  Future<HydroCommandAccepted> toggleTargetDoseAb(
+    String backendBaseUrl,
+    double concentration,
+  ) async {
+    lastRemoteTargetDoseBaseUrl = backendBaseUrl;
+    lastRemoteTargetDoseConcentration = concentration;
+    return const HydroCommandAccepted(
+      requestId: 'target-dose-ab-1',
+      status: 'accepted',
+    );
+  }
+
+  @override
   Future<HydroEcHistory> fetchLocalEcHistory(String baseUrl) async {
+    return const HydroEcHistory(
+      periodMs: 2000,
+      windowMs: 180000,
+      ecValues: [1200, 1300],
+    );
+  }
+
+  @override
+  Future<HydroEcHistory> fetchEcHistory(String backendBaseUrl) async {
     return const HydroEcHistory(
       periodMs: 2000,
       windowMs: 180000,

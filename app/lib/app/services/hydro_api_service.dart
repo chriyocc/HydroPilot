@@ -32,10 +32,28 @@ class HydroStatusSnapshot {
         waterTemperature:
             HydroApiService._readDouble(sensors, ['waterTemperature']),
         waterLevel: HydroApiService._readDouble(sensors, ['waterLevel']),
+        humidity: HydroApiService._readDouble(sensors, ['humidity']),
+        tds: HydroApiService._readDouble(sensors, ['tds']),
+        distance: HydroApiService._readDouble(sensors, ['distance']),
       ),
       deviceState: DeviceState(
         pumpOn: HydroApiService._readBool(deviceState, ['pumpOn']),
         lightOn: HydroApiService._readBool(deviceState, ['lightOn']),
+        primeAOn: HydroApiService._readBool(deviceState, ['primeAOn']),
+        primeBOn: HydroApiService._readBool(deviceState, ['primeBOn']),
+        targetDoseAOn:
+            HydroApiService._readBool(deviceState, ['targetDoseAOn']),
+        targetDoseBOn:
+            HydroApiService._readBool(deviceState, ['targetDoseBOn']),
+        targetDoseAbOn:
+            HydroApiService._readBool(deviceState, ['targetDoseAbOn']),
+        shotDoseAOn: HydroApiService._readBool(deviceState, ['shotDoseAOn']),
+        shotDoseBOn: HydroApiService._readBool(deviceState, ['shotDoseBOn']),
+        liquidAWet: HydroApiService._readBool(deviceState, ['liquidAWet']),
+        liquidBWet: HydroApiService._readBool(deviceState, ['liquidBWet']),
+        targetEcA: HydroApiService._readDouble(deviceState, ['targetEcA']),
+        targetEcB: HydroApiService._readDouble(deviceState, ['targetEcB']),
+        targetEcAb: HydroApiService._readDouble(deviceState, ['targetEcAb']),
       ),
       runtimeStatus: RuntimeStatus(
         isBackendReachable: true,
@@ -131,10 +149,10 @@ class HydroEcHistory {
   final List<double> ecValues;
 
   factory HydroEcHistory.fromPayload(Map<String, dynamic> payload) {
-    final values = payload['ec'];
+    final values = payload['ecValues'] ?? payload['ec'];
     return HydroEcHistory(
-      periodMs: HydroApiService._readInt(payload, ['period_ms']) ?? 0,
-      windowMs: HydroApiService._readInt(payload, ['window_ms']) ?? 0,
+      periodMs: HydroApiService._readInt(payload, ['periodMs', 'period_ms']) ?? 0,
+      windowMs: HydroApiService._readInt(payload, ['windowMs', 'window_ms']) ?? 0,
       ecValues: values is List
           ? values
               .map((value) => value is num
@@ -194,6 +212,16 @@ class HydroApiService {
   Future<HydroEcHistory> fetchLocalEcHistory(String baseUrl) async {
     final response = await _client
         .get(_buildLocalUri(baseUrl, '/api/ec_history'))
+        .timeout(_requestTimeout);
+    _ensureSuccess(response);
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return HydroEcHistory.fromPayload(payload);
+  }
+
+  Future<HydroEcHistory> fetchEcHistory(String backendBaseUrl) async {
+    final response = await _client
+        .get(_buildBackendUri(backendBaseUrl, '/api/device/ec-history'))
         .timeout(_requestTimeout);
     _ensureSuccess(response);
 
@@ -272,6 +300,71 @@ class HydroApiService {
       backendBaseUrl,
       '/api/device/commands/nutrient/b',
       {'dose': true},
+    );
+  }
+
+  Future<HydroCommandAccepted> togglePrimeA(String backendBaseUrl) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/prime/a',
+      {'toggle': true},
+    );
+  }
+
+  Future<HydroCommandAccepted> togglePrimeB(String backendBaseUrl) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/prime/b',
+      {'toggle': true},
+    );
+  }
+
+  Future<HydroCommandAccepted> toggleTargetDoseA(
+    String backendBaseUrl,
+    double concentration,
+  ) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/target-dose/a',
+      {'concentration': concentration},
+    );
+  }
+
+  Future<HydroCommandAccepted> toggleTargetDoseB(
+    String backendBaseUrl,
+    double concentration,
+  ) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/target-dose/b',
+      {'concentration': concentration},
+    );
+  }
+
+  Future<HydroCommandAccepted> toggleTargetDoseAb(
+    String backendBaseUrl,
+    double concentration,
+  ) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/target-dose/ab',
+      {'concentration': concentration},
+    );
+  }
+
+  Future<HydroCommandAccepted> startShotDoseA(String backendBaseUrl) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/shot-dose/a',
+      {'start': true},
+    );
+  }
+
+  Future<HydroCommandAccepted> startShotDoseB(String backendBaseUrl) {
+    return _postCommand(
+      backendBaseUrl,
+      '/api/device/commands/shot-dose/b',
+      {'start': true},
     );
   }
 

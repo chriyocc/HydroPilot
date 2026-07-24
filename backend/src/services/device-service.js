@@ -18,9 +18,16 @@ function createDeviceService({
         commands: {
           pump: true,
           light: true,
-          nutrientA: true,
-          nutrientB: true,
-        },
+        nutrientA: true,
+        nutrientB: true,
+        primeA: true,
+        primeB: true,
+        targetDoseA: true,
+        targetDoseB: true,
+        targetDoseAb: true,
+        shotDoseA: true,
+        shotDoseB: true,
+      },
         streaming: {
           sse: true,
         },
@@ -34,6 +41,11 @@ function createDeviceService({
 
   function getStatus() {
     return snapshotStore.getSnapshot();
+  }
+
+  function getEcHistory() {
+    const snapshot = snapshotStore.getSnapshot();
+    return snapshot.ecHistory;
   }
 
   function getHealth() {
@@ -116,6 +128,17 @@ function createDeviceService({
     });
   }
 
+  function handleEcHistory({ periodMs, windowMs, ecValues, ts }) {
+    snapshotStore.applyEcHistory({ periodMs, windowMs, ecValues, ts });
+    eventStream.publish('ec-history', {
+      deviceId: config.hydroDeviceId,
+      periodMs,
+      windowMs,
+      ecValues,
+      ts,
+    });
+  }
+
   function setBrokerStatus(status) {
     snapshotStore.setBrokerStatus(status);
     logger?.info('Broker status changed', {
@@ -181,20 +204,120 @@ function createDeviceService({
     };
   }
 
+  async function publishPrimeACommand({ clientRequestId }) {
+    const result = await commandService.publishCommand({
+      topic: topics.cmdPrimeA,
+      payload: { action: 'toggle' },
+      clientRequestId,
+    });
+    return {
+      ok: result.ok,
+      requestId: result.requestId,
+      status: result.status,
+    };
+  }
+
+  async function publishPrimeBCommand({ clientRequestId }) {
+    const result = await commandService.publishCommand({
+      topic: topics.cmdPrimeB,
+      payload: { action: 'toggle' },
+      clientRequestId,
+    });
+    return {
+      ok: result.ok,
+      requestId: result.requestId,
+      status: result.status,
+    };
+  }
+
+  async function publishTargetDoseACommand({ concentration, clientRequestId }) {
+    const result = await commandService.publishCommand({
+      topic: topics.cmdTargetDoseA,
+      payload: { action: 'toggle', concentration },
+      clientRequestId,
+    });
+    return {
+      ok: result.ok,
+      requestId: result.requestId,
+      status: result.status,
+    };
+  }
+
+  async function publishTargetDoseBCommand({ concentration, clientRequestId }) {
+    const result = await commandService.publishCommand({
+      topic: topics.cmdTargetDoseB,
+      payload: { action: 'toggle', concentration },
+      clientRequestId,
+    });
+    return {
+      ok: result.ok,
+      requestId: result.requestId,
+      status: result.status,
+    };
+  }
+
+  async function publishTargetDoseAbCommand({ concentration, clientRequestId }) {
+    const result = await commandService.publishCommand({
+      topic: topics.cmdTargetDoseAb,
+      payload: { action: 'toggle', concentration },
+      clientRequestId,
+    });
+    return {
+      ok: result.ok,
+      requestId: result.requestId,
+      status: result.status,
+    };
+  }
+
+  async function publishShotDoseACommand({ clientRequestId }) {
+    const result = await commandService.publishCommand({
+      topic: topics.cmdShotDoseA,
+      payload: { action: 'start' },
+      clientRequestId,
+    });
+    return {
+      ok: result.ok,
+      requestId: result.requestId,
+      status: result.status,
+    };
+  }
+
+  async function publishShotDoseBCommand({ clientRequestId }) {
+    const result = await commandService.publishCommand({
+      topic: topics.cmdShotDoseB,
+      payload: { action: 'start' },
+      clientRequestId,
+    });
+    return {
+      ok: result.ok,
+      requestId: result.requestId,
+      status: result.status,
+    };
+  }
+
   return {
     getMetadata,
     getStatus,
+    getEcHistory,
     getHealth,
     openEventStream,
     handleTelemetry,
     handleState,
     handleAvailability,
     handleAlarm,
+    handleEcHistory,
     setBrokerStatus,
     publishPumpCommand,
     publishLightCommand,
     publishNutrientACommand,
     publishNutrientBCommand,
+    publishPrimeACommand,
+    publishPrimeBCommand,
+    publishTargetDoseACommand,
+    publishTargetDoseBCommand,
+    publishTargetDoseAbCommand,
+    publishShotDoseACommand,
+    publishShotDoseBCommand,
   };
 }
 

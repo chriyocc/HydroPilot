@@ -44,6 +44,68 @@ function validateDoseCommand(body) {
   }
 }
 
+function validateToggleCommand(body) {
+  const allowedKeys = new Set(['toggle', 'clientRequestId']);
+  const bodyKeys = Object.keys(body ?? {});
+  const hasUnknownKey = bodyKeys.some((key) => !allowedKeys.has(key));
+
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    Array.isArray(body) ||
+    hasUnknownKey ||
+    body.toggle !== true ||
+    ('clientRequestId' in body && typeof body.clientRequestId !== 'string')
+  ) {
+    throw createHttpError(
+      400,
+      'Command body must be {"toggle": true, "clientRequestId"?: string}.',
+    );
+  }
+}
+
+function validateStartCommand(body) {
+  const allowedKeys = new Set(['start', 'clientRequestId']);
+  const bodyKeys = Object.keys(body ?? {});
+  const hasUnknownKey = bodyKeys.some((key) => !allowedKeys.has(key));
+
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    Array.isArray(body) ||
+    hasUnknownKey ||
+    body.start !== true ||
+    ('clientRequestId' in body && typeof body.clientRequestId !== 'string')
+  ) {
+    throw createHttpError(
+      400,
+      'Command body must be {"start": true, "clientRequestId"?: string}.',
+    );
+  }
+}
+
+function validateTargetDoseCommand(body) {
+  const allowedKeys = new Set(['concentration', 'clientRequestId']);
+  const bodyKeys = Object.keys(body ?? {});
+  const hasUnknownKey = bodyKeys.some((key) => !allowedKeys.has(key));
+
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    Array.isArray(body) ||
+    hasUnknownKey ||
+    typeof body.concentration !== 'number' ||
+    !Number.isFinite(body.concentration) ||
+    body.concentration < 0 ||
+    ('clientRequestId' in body && typeof body.clientRequestId !== 'string')
+  ) {
+    throw createHttpError(
+      400,
+      'Command body must be {"concentration": number, "clientRequestId"?: string}.',
+    );
+  }
+}
+
 function createDeviceController({ deviceService }) {
   async function getDevice(_request, response) {
     response.json(deviceService.getMetadata());
@@ -51,6 +113,10 @@ function createDeviceController({ deviceService }) {
 
   async function getDeviceStatus(_request, response) {
     response.json(deviceService.getStatus());
+  }
+
+  async function getDeviceEcHistory(_request, response) {
+    response.json(deviceService.getEcHistory());
   }
 
   async function getDeviceEvents(request, response) {
@@ -81,14 +147,64 @@ function createDeviceController({ deviceService }) {
     response.status(202).json(result);
   }
 
+  async function postPrimeACommand(request, response) {
+    validateToggleCommand(request.body);
+    const result = await deviceService.publishPrimeACommand(request.body);
+    response.status(202).json(result);
+  }
+
+  async function postPrimeBCommand(request, response) {
+    validateToggleCommand(request.body);
+    const result = await deviceService.publishPrimeBCommand(request.body);
+    response.status(202).json(result);
+  }
+
+  async function postTargetDoseACommand(request, response) {
+    validateTargetDoseCommand(request.body);
+    const result = await deviceService.publishTargetDoseACommand(request.body);
+    response.status(202).json(result);
+  }
+
+  async function postTargetDoseBCommand(request, response) {
+    validateTargetDoseCommand(request.body);
+    const result = await deviceService.publishTargetDoseBCommand(request.body);
+    response.status(202).json(result);
+  }
+
+  async function postTargetDoseAbCommand(request, response) {
+    validateTargetDoseCommand(request.body);
+    const result = await deviceService.publishTargetDoseAbCommand(request.body);
+    response.status(202).json(result);
+  }
+
+  async function postShotDoseACommand(request, response) {
+    validateStartCommand(request.body);
+    const result = await deviceService.publishShotDoseACommand(request.body);
+    response.status(202).json(result);
+  }
+
+  async function postShotDoseBCommand(request, response) {
+    validateStartCommand(request.body);
+    const result = await deviceService.publishShotDoseBCommand(request.body);
+    response.status(202).json(result);
+  }
+
   return {
     getDevice,
     getDeviceStatus,
+    getDeviceEcHistory,
     getDeviceEvents,
     postPumpCommand,
     postLightCommand,
     postNutrientACommand,
     postNutrientBCommand,
+    postPrimeACommand,
+    postPrimeBCommand,
+    postTargetDoseACommand,
+    postTargetDoseBCommand,
+    postTargetDoseAbCommand,
+    postShotDoseACommand,
+    postShotDoseBCommand,
   };
 }
 
